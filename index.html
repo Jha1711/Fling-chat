@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WhatsApp Style Chat</title>
+<title>Global Chat App</title>
 
 <style>
 body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
@@ -23,54 +23,31 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
 .input-box {display:flex;padding:10px;border-top:1px solid #111;}
 .input-box input {flex:1;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
 .input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
+.delete-btn {background:red;margin:5px;padding:5px;border:none;color:white;border-radius:5px;}
 </style>
 </head>
 <body>
 
 <div class="app">
 
-  <!-- Chat List -->
-  <div id="listScreen">
-    <div class="header">Chats</div>
+<div id="listScreen">
+  <div class="header">Global Users</div>
+  <div id="userList" class="chat-list"></div>
+</div>
 
-    <div class="chat-list">
-      <div class="chat-item" onclick="openChat('room1','User 1')">
-        <div class="avatar"></div>
-        <div class="chat-info">
-          <div class="chat-name">User 1</div>
-        </div>
-      </div>
+<div id="chatScreen" class="chat-screen">
+  <div id="chatTitle" class="chat-header" onclick="back()">⬅ Back</div>
+  <button class="delete-btn" onclick="deleteChat()">Delete Chat</button>
+  <div id="messages" class="messages"></div>
 
-      <div class="chat-item" onclick="openChat('room2','User 2')">
-        <div class="avatar"></div>
-        <div class="chat-info">
-          <div class="chat-name">User 2</div>
-        </div>
-      </div>
-
-      <div class="chat-item" onclick="openChat('room3','User 3')">
-        <div class="avatar"></div>
-        <div class="chat-info">
-          <div class="chat-name">User 3</div>
-        </div>
-      </div>
-    </div>
+  <div class="input-box">
+    <input id="msgInput" placeholder="Type message..." />
+    <button onclick="sendMessage()">Send</button>
   </div>
-
-  <!-- Chat Screen -->
-  <div id="chatScreen" class="chat-screen">
-    <div id="chatTitle" class="chat-header" onclick="back()">⬅ Back</div>
-    <div id="messages" class="messages"></div>
-
-    <div class="input-box">
-      <input id="msgInput" placeholder="Type message..." />
-      <button onclick="sendMessage()">Send</button>
-    </div>
-  </div>
+</div>
 
 </div>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
@@ -84,18 +61,45 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 
+const userId = "user_" + Math.floor(Math.random() * 100000);
+const usersRef = firebase.database().ref("users");
+
+let currentChat = "";
 let db;
-let currentRoom = "";
 
-const userId = "user_" + Math.floor(Math.random() * 10000);
+// Register user globally
+usersRef.child(userId).set(true);
 
-function openChat(room, name) {
-  currentRoom = room;
-  db = firebase.database().ref(room);
+// Load all users globally
+usersRef.on("value", snapshot => {
+  const userList = document.getElementById("userList");
+  userList.innerHTML = "";
+
+  snapshot.forEach(child => {
+    const id = child.key;
+    if (id === userId) return;
+
+    const div = document.createElement("div");
+    div.className = "chat-item";
+    div.innerHTML = `
+      <div class="avatar"></div>
+      <div class="chat-info">
+        <div class="chat-name">${id}</div>
+      </div>
+    `;
+
+    div.onclick = () => openChat(id);
+    userList.appendChild(div);
+  });
+});
+
+function openChat(otherUser) {
+  currentChat = userId < otherUser ? userId + "_" + otherUser : otherUser + "_" + userId;
+  db = firebase.database().ref("chats/" + currentChat);
 
   document.getElementById("listScreen").style.display = "none";
   document.getElementById("chatScreen").style.display = "flex";
-  document.getElementById("chatTitle").innerText = "⬅ " + name;
+  document.getElementById("chatTitle").innerText = "⬅ " + otherUser;
 
   const messagesDiv = document.getElementById("messages");
   messagesDiv.innerHTML = "";
@@ -108,11 +112,8 @@ function openChat(room, name) {
     const div = document.createElement("div");
     div.classList.add("msg");
 
-    if (data.sender === userId) {
-      div.classList.add("sent");
-    } else {
-      div.classList.add("received");
-    }
+    if (data.sender === userId) div.classList.add("sent");
+    else div.classList.add("received");
 
     div.innerText = data.text;
     messagesDiv.appendChild(div);
@@ -120,22 +121,24 @@ function openChat(room, name) {
   });
 }
 
-function back() {
-  document.getElementById("listScreen").style.display = "block";
-  document.getElementById("chatScreen").style.display = "none";
-}
-
 function sendMessage() {
   const input = document.getElementById("msgInput");
   const text = input.value.trim();
   if (!text || !db) return;
 
-  db.push({
-    text: text,
-    sender: userId
-  });
-
+  db.push({ text, sender: userId });
   input.value = "";
+}
+
+function deleteChat() {
+  if (!currentChat) return;
+  firebase.database().ref("chats/" + currentChat).remove();
+  document.getElementById("messages").innerHTML = "";
+}
+
+function back() {
+  document.getElementById("listScreen").style.display = "block";
+  document.getElementById("chatScreen").style.display = "none";
 }
 </script>
 
