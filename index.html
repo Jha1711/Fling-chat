@@ -35,7 +35,11 @@ body {margin:0;font-family:Arial;background:#111;color:#fff;display:flex;justify
 </div>
 
 <div id="listScreen" style="display:none">
-  <div class="header">Chats <span onclick="searchUser()">🔍</span></div>
+  <div class="header">
+    Chats 
+    <span onclick="searchUser()">🔍</span>
+    <span onclick="findNearby()">📍</span>
+  </div>
   <div id="userList" class="chat-list"></div>
 </div>
 
@@ -74,16 +78,35 @@ let db;
 const usersRef=firebase.database().ref("users");
 const contactsRef=(id)=>firebase.database().ref("contacts/"+id);
 
+// ✅ LOGIN WITH LOCATION
 function login(){
  let name=document.getElementById("username").value.trim();
  if(!name)return;
+
  userId=name+"_"+Math.floor(Math.random()*1000);
- usersRef.child(userId).set(true);
+
+ navigator.geolocation.getCurrentPosition(pos=>{
+   const {latitude, longitude} = pos.coords;
+
+   usersRef.child(userId).set({
+     lat: latitude,
+     lng: longitude
+   });
+
+   startApp();
+
+ },()=>{
+   alert("Allow location to use nearby feature ⚠️");
+ });
+}
+
+function startApp(){
  document.getElementById("loginScreen").style.display="none";
  document.getElementById("listScreen").style.display="block";
  loadUsers();
 }
 
+// ✅ LOAD EXISTING CONTACTS
 function loadUsers(){
  contactsRef(userId).on("value",snap=>{
   const list=document.getElementById("userList");
@@ -113,6 +136,7 @@ function loadUsers(){
  });
 }
 
+// ✅ SEARCH USER
 function searchUser(){
  let name=prompt("Enter exact username:");
  if(!name)return;
@@ -126,6 +150,66 @@ function searchUser(){
  });
 }
 
+// ✅ FIND NEARBY USERS
+function findNearby(){
+ navigator.geolocation.getCurrentPosition(pos=>{
+   const myLat = pos.coords.latitude;
+   const myLng = pos.coords.longitude;
+
+   const list=document.getElementById("userList");
+   list.innerHTML="";
+
+   usersRef.once("value",snap=>{
+     snap.forEach(user=>{
+       const data=user.val();
+       const id=user.key;
+
+       if(id===userId || !data.lat) return;
+
+       const distance = getDistance(myLat,myLng,data.lat,data.lng);
+
+       if(distance <= 5){
+
+         const div=document.createElement("div");
+         div.className="chat-item";
+
+         div.innerHTML=`
+           <div class="avatar"></div>
+           <div class="chat-info">
+             <div class="chat-name">${id}</div>
+             <div style="font-size:12px;color:gray">${distance.toFixed(2)} km away</div>
+           </div>
+         `;
+
+         div.onclick=()=>openChat(id);
+         list.appendChild(div);
+       }
+     });
+
+     if(list.innerHTML===""){
+       list.innerHTML="<p style='padding:10px;color:gray'>No nearby users found</p>";
+     }
+   });
+
+ });
+}
+
+// ✅ DISTANCE FUNCTION
+function getDistance(lat1, lon1, lat2, lon2){
+ const R = 6371;
+ const dLat = (lat2-lat1) * Math.PI/180;
+ const dLon = (lon2-lon1) * Math.PI/180;
+
+ const a =
+   Math.sin(dLat/2)*Math.sin(dLat/2) +
+   Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180) *
+   Math.sin(dLon/2)*Math.sin(dLon/2);
+
+ const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+ return R * c;
+}
+
+// ✅ CHAT SYSTEM
 function openChat(other){
  contactsRef(userId).child(other).set(true);
  contactsRef(other).child(userId).set(true);
@@ -152,22 +236,11 @@ function openChat(other){
 
   msgDiv.appendChild(div);
   msgDiv.scrollTop=msgDiv.scrollHeight;
-
-  if(d.sender!==userId){
-    let badge=document.getElementById("count_"+other);
-    if(badge){
-      badge.style.display="block";
-      badge.innerText=(parseInt(badge.innerText)||0)+1;
-    }
-  }
  });
 
  db.child("typing").on("value",snap=>{
-  if(snap.val() && snap.val()!==userId){
-    document.getElementById("typing").innerText="Typing...";
-  }else{
-    document.getElementById("typing").innerText="";
-  }
+  document.getElementById("typing").innerText =
+    (snap.val() && snap.val()!==userId) ? "Typing..." : "";
  });
 }
 
@@ -192,9 +265,6 @@ function deleteChat(){
 }
 
 function back(){
- const name=document.getElementById("chatName").innerText;
- const badge=document.getElementById("count_"+name);
- if(badge){badge.style.display="none";badge.innerText="0";}
  document.getElementById("chatScreen").style.display="none";
  document.getElementById("listScreen").style.display="block";
 }
