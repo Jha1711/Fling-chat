@@ -3,66 +3,42 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WhatsApp Style Chat</title>
+<title>Advanced Chat App</title>
 
 <style>
 body {margin:0;font-family:Arial;background:#111;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
 .app {width:380px;height:680px;background:#0b141a;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
-
-/* HEADER */
-.header {background:#202c33;padding:15px;font-size:18px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;}
-.header-icons span {margin-left:10px;cursor:pointer;}
-
-/* CHAT LIST */
+.header {background:#202c33;padding:15px;display:flex;justify-content:space-between;align-items:center;}
 .chat-list {flex:1;overflow-y:auto;}
 .chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #222;cursor:pointer;}
-.chat-item:hover {background:#1f2c33;}
 .avatar {width:45px;height:45px;border-radius:50%;background:#25d366;margin-right:10px;}
 .chat-info {flex:1;}
 .chat-name {font-weight:bold;}
-.chat-last {font-size:12px;color:#aaa;}
-
-/* CHAT SCREEN */
+.unread {background:red;color:white;border-radius:50%;padding:3px 7px;font-size:12px;}
 .chat-screen {display:none;flex-direction:column;height:100%;}
-.messages {flex:1;padding:10px;overflow-y:auto;background:#0b141a;}
-.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;font-size:14px;}
+.messages {flex:1;padding:10px;overflow-y:auto;}
+.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;}
 .sent {background:#005c4b;margin-left:auto;}
 .received {background:#202c33;}
-
-/* INPUT */
 .input-box {display:flex;padding:10px;background:#202c33;}
-.input-box input {flex:1;padding:12px;border-radius:20px;border:none;background:#2a3942;color:white;font-size:15px;}
-.input-box button {margin-left:8px;background:#25d366;border:none;padding:10px 15px;border-radius:50%;cursor:pointer;}
-
-/* LOGIN */
-.center {display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;}
-input.login {width:80%;padding:12px;border-radius:10px;border:none;background:#2a3942;color:white;}
-button.login {margin-top:10px;padding:10px 20px;border:none;background:#25d366;color:white;border-radius:10px;}
+.input-box input {flex:1;padding:12px;border-radius:20px;border:none;background:#2a3942;color:white;}
+.typing {font-size:12px;color:#aaa;padding-left:10px;}
 </style>
 </head>
 <body>
 
 <div class="app">
 
-<!-- LOGIN -->
-<div id="loginScreen" class="center">
-  <h2>Welcome</h2>
-  <input id="username" class="login" placeholder="Enter name" />
-  <button class="login" onclick="login()">Continue</button>
+<div id="loginScreen" style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%">
+  <input id="username" placeholder="Enter name" />
+  <button onclick="login()">Enter</button>
 </div>
 
-<!-- DASHBOARD -->
 <div id="listScreen" style="display:none">
-  <div class="header">
-    WhatsApp
-    <div class="header-icons">
-      <span onclick="refreshUsers()">🔄</span>
-    </div>
-  </div>
+  <div class="header">Chats</div>
   <div id="userList" class="chat-list"></div>
 </div>
 
-<!-- CHAT -->
 <div id="chatScreen" class="chat-screen">
   <div class="header">
     <span onclick="back()">⬅</span>
@@ -70,8 +46,9 @@ button.login {margin-top:10px;padding:10px 20px;border:none;background:#25d366;c
     <span onclick="deleteChat()">🗑️</span>
   </div>
   <div id="messages" class="messages"></div>
+  <div class="typing" id="typing"></div>
   <div class="input-box">
-    <input id="msgInput" placeholder="Message" />
+    <input id="msgInput" placeholder="Message" oninput="typingStatus(true)" />
     <button onclick="sendMessage()">➤</button>
   </div>
 </div>
@@ -91,106 +68,90 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 
-let userId = "";
-const usersRef = firebase.database().ref("users");
-let currentChat = "";
+let userId="";
+let currentChat="";
 let db;
+const usersRef=firebase.database().ref("users");
 
-function login() {
-  let name = document.getElementById("username").value.trim();
-  if (!name) return alert("Enter name");
+function login(){
+ let name=document.getElementById("username").value.trim();
+ if(!name)return;
+ name=name+"_"+Math.floor(Math.random()*1000);
+ userId=name;
+ usersRef.child(userId).set(true);
+ document.getElementById("loginScreen").style.display="none";
+ document.getElementById("listScreen").style.display="block";
+ loadUsers();
+}
 
-  usersRef.once("value", snap => {
-    if (snap.hasChild(name)) {
-      name = name + "_" + Math.floor(Math.random() * 1000);
-    }
-
-    userId = name;
-    usersRef.child(userId).set(true);
-
-    document.getElementById("loginScreen").style.display = "none";
-    document.getElementById("listScreen").style.display = "block";
-
-    loadUsers();
+function loadUsers(){
+ usersRef.on("value",snap=>{
+  const list=document.getElementById("userList");
+  list.innerHTML="";
+  snap.forEach(c=>{
+    const id=c.key;
+    if(id===userId)return;
+    const div=document.createElement("div");
+    div.className="chat-item";
+    div.innerHTML=`<div class='avatar'></div><div class='chat-info'><div class='chat-name'>${id}</div></div><div id='count_${id}' class='unread' style='display:none'>0</div>`;
+    div.onclick=()=>openChat(id);
+    list.appendChild(div);
   });
+ });
 }
 
-function loadUsers() {
-  usersRef.on("value", snapshot => {
-    const userList = document.getElementById("userList");
-    userList.innerHTML = "";
-
-    snapshot.forEach(child => {
-      const id = child.key;
-      if (id === userId) return;
-
-      const div = document.createElement("div");
-      div.className = "chat-item";
-      div.innerHTML = `
-        <div class='avatar'></div>
-        <div class='chat-info'>
-          <div class='chat-name'>${id}</div>
-          <div class='chat-last'>Tap to chat</div>
-        </div>`;
-
-      div.onclick = () => openChat(id);
-      userList.appendChild(div);
-    });
-  });
-}
-
-function refreshUsers() {
-  loadUsers();
-}
-
-function openChat(otherUser) {
-  currentChat = userId < otherUser ? userId + "_" + otherUser : otherUser + "_" + userId;
-  db = firebase.database().ref("chats/" + currentChat);
-
-  document.getElementById("chatName").innerText = otherUser;
-  document.getElementById("listScreen").style.display = "none";
-  document.getElementById("chatScreen").style.display = "flex";
-
-  const messagesDiv = document.getElementById("messages");
-  messagesDiv.innerHTML = "";
-
-  db.off();
-
-  db.on("child_added", snapshot => {
-    const data = snapshot.val();
-
-    const div = document.createElement("div");
-    div.classList.add("msg");
-
-    if (data.sender === userId) div.classList.add("sent");
-    else div.classList.add("received");
-
-    div.innerText = data.text;
-    messagesDiv.appendChild(div);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  });
-}
-
-function sendMessage() {
-  const input = document.getElementById("msgInput");
-  const text = input.value.trim();
-  if (!text || !db) return;
-
-  db.push({ text, sender: userId });
-  input.value = "";
-}
-
-function deleteChat() {
-  if (!currentChat) return;
-  if (confirm("Delete chat?")) {
-    firebase.database().ref("chats/" + currentChat).remove();
-    document.getElementById("messages").innerHTML = "";
+function openChat(other){
+ currentChat=userId<other?userId+"_"+other:other+"_"+userId;
+ db=firebase.database().ref("chats/"+currentChat);
+ document.getElementById("chatName").innerText=other;
+ document.getElementById("listScreen").style.display="none";
+ document.getElementById("chatScreen").style.display="flex";
+ const msgDiv=document.getElementById("messages");
+ msgDiv.innerHTML="";
+ db.off();
+ db.on("child_added",snap=>{
+  const d=snap.val();
+  const div=document.createElement("div");
+  div.className="msg "+(d.sender===userId?"sent":"received");
+  div.innerText=d.text;
+  msgDiv.appendChild(div);
+  msgDiv.scrollTop=msgDiv.scrollHeight;
+  if(d.sender!==userId){
+    let badge=document.getElementById("count_"+other);
+    if(badge){badge.style.display="block";badge.innerText=parseInt(badge.innerText||0)+1;}
   }
+ });
+
+ db.child("typing").on("value",snap=>{
+  if(snap.val() && snap.val()!==userId){
+    document.getElementById("typing").innerText="Typing...";
+  }else{
+    document.getElementById("typing").innerText="";
+  }
+ });
 }
 
-function back() {
-  document.getElementById("listScreen").style.display = "block";
-  document.getElementById("chatScreen").style.display = "none";
+function sendMessage(){
+ const input=document.getElementById("msgInput");
+ const text=input.value.trim();
+ if(!text)return;
+ db.push({text, sender:userId});
+ input.value="";
+ typingStatus(false);
+}
+
+function typingStatus(status){
+ if(db) db.child("typing").set(status?userId:null);
+}
+
+function deleteChat(){
+ if(currentChat) firebase.database().ref("chats/"+currentChat).remove();
+ document.getElementById("messages").innerHTML="";
+}
+
+function back(){
+ document.getElementById("chatScreen").style.display="none";
+ document.getElementById("listScreen").style.display="block";
 }
 </script>
 
