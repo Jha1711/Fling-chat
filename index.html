@@ -3,21 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Anonymous Chat UI</title>
+<title>WhatsApp Style Chat</title>
 
 <style>
 body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
 .app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
 .header {padding:15px;font-size:20px;font-weight:bold;}
-.search {padding:10px;}
-.search input {width:100%;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
 .chat-list {flex:1;overflow-y:auto;}
 .chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #111;cursor:pointer;}
 .avatar {width:40px;height:40px;border-radius:50%;background:pink;margin-right:10px;}
 .chat-info {flex:1;}
 .chat-name {font-weight:bold;}
-.chat-msg {font-size:12px;color:gray;}
-.time {font-size:12px;color:gray;}
 .chat-screen {display:none;flex-direction:column;height:100%;}
 .chat-header {padding:15px;border-bottom:1px solid #111;cursor:pointer;}
 .messages {flex:1;padding:10px;overflow-y:auto;}
@@ -36,23 +32,34 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
   <!-- Chat List -->
   <div id="listScreen">
     <div class="header">Chats</div>
-    <div class="search"><input placeholder="Search" /></div>
 
     <div class="chat-list">
-      <div class="chat-item" onclick="openChat()">
+      <div class="chat-item" onclick="openChat('room1','User 1')">
         <div class="avatar"></div>
         <div class="chat-info">
-          <div class="chat-name">Anonymous Room</div>
-          <div class="chat-msg">Tap to chat</div>
+          <div class="chat-name">User 1</div>
         </div>
-        <div class="time">Live</div>
+      </div>
+
+      <div class="chat-item" onclick="openChat('room2','User 2')">
+        <div class="avatar"></div>
+        <div class="chat-info">
+          <div class="chat-name">User 2</div>
+        </div>
+      </div>
+
+      <div class="chat-item" onclick="openChat('room3','User 3')">
+        <div class="avatar"></div>
+        <div class="chat-info">
+          <div class="chat-name">User 3</div>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Chat Screen -->
   <div id="chatScreen" class="chat-screen">
-    <div class="chat-header" onclick="back()">⬅ Back</div>
+    <div id="chatTitle" class="chat-header" onclick="back()">⬅ Back</div>
     <div id="messages" class="messages"></div>
 
     <div class="input-box">
@@ -68,7 +75,6 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
-// 🔴 PASTE YOUR FIREBASE CONFIG HERE
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "fling-chat-95e81.firebaseapp.com",
@@ -77,14 +83,41 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database().ref("chatroom");
 
-// Random user ID
+let db;
+let currentRoom = "";
+
 const userId = "user_" + Math.floor(Math.random() * 10000);
 
-function openChat() {
+function openChat(room, name) {
+  currentRoom = room;
+  db = firebase.database().ref(room);
+
   document.getElementById("listScreen").style.display = "none";
   document.getElementById("chatScreen").style.display = "flex";
+  document.getElementById("chatTitle").innerText = "⬅ " + name;
+
+  const messagesDiv = document.getElementById("messages");
+  messagesDiv.innerHTML = "";
+
+  db.off();
+
+  db.on("child_added", snapshot => {
+    const data = snapshot.val();
+
+    const div = document.createElement("div");
+    div.classList.add("msg");
+
+    if (data.sender === userId) {
+      div.classList.add("sent");
+    } else {
+      div.classList.add("received");
+    }
+
+    div.innerText = data.text;
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  });
 }
 
 function back() {
@@ -95,7 +128,7 @@ function back() {
 function sendMessage() {
   const input = document.getElementById("msgInput");
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || !db) return;
 
   db.push({
     text: text,
@@ -104,27 +137,6 @@ function sendMessage() {
 
   input.value = "";
 }
-
-// Receive messages
-const messagesDiv = document.getElementById("messages");
-
-db.on("child_added", snapshot => {
-  const data = snapshot.val();
-
-  const div = document.createElement("div");
-  div.classList.add("msg");
-
-  if (data.sender === userId) {
-    div.classList.add("sent");
-  } else {
-    div.classList.add("received");
-  }
-
-  div.innerText = data.text;
-  messagesDiv.appendChild(div);
-
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-});
 </script>
 
 </body>
