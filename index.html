@@ -9,9 +9,10 @@
 body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
 .app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
 .center {display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;}
-input {padding:10px;margin:5px;border-radius:10px;border:none;background:#1a1a1a;color:white;width:80%;}
+input {padding:12px;margin:5px;border-radius:10px;border:none;background:#1a1a1a;color:white;width:85%;font-size:16px;}
 button {padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;margin-top:10px;width:85%;}
-.header {padding:15px;font-size:20px;font-weight:bold;}
+.header {padding:15px;font-size:20px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;}
+.refresh {cursor:pointer;font-size:18px;}
 .chat-list {flex:1;overflow-y:auto;}
 .chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #111;cursor:pointer;}
 .avatar {width:40px;height:40px;border-radius:50%;background:pink;margin-right:10px;}
@@ -23,8 +24,9 @@ button {padding:10px;border:none;border-radius:10px;background:#22c55e;color:whi
 .sent {background:#d4f1a7;color:black;margin-left:auto;}
 .received {background:#334155;}
 .input-box {display:flex;padding:10px;border-top:1px solid #111;}
-.input-box input {flex:1;}
+.input-box input {flex:1;padding:14px;font-size:16px;} /* bigger typing box */
 .input-box button {margin-left:5px;}
+.delete-icon {cursor:pointer;font-size:18px;color:red;}
 </style>
 </head>
 <body>
@@ -40,13 +42,16 @@ button {padding:10px;border:none;border-radius:10px;background:#22c55e;color:whi
 
 <!-- USER LIST -->
 <div id="listScreen" style="display:none">
-  <div class="header">Users</div>
+  <div class="header">Users <span class="refresh" onclick="refreshUsers()">🔄</span></div>
   <div id="userList" class="chat-list"></div>
 </div>
 
 <!-- CHAT -->
 <div id="chatScreen" class="chat-screen">
-  <div class="header" onclick="back()">⬅ Back</div>
+  <div class="header">
+    <span onclick="back()">⬅ Back</span>
+    <span class="delete-icon" onclick="deleteChat()">🗑️</span>
+  </div>
   <div id="messages" class="messages"></div>
   <div class="input-box">
     <input id="msgInput" placeholder="Type message..." />
@@ -75,16 +80,23 @@ let currentChat = "";
 let db;
 
 function login() {
-  const name = document.getElementById("username").value.trim();
+  let name = document.getElementById("username").value.trim();
   if (!name) return alert("Enter username");
 
-  userId = name;
-  usersRef.child(userId).set(true);
+  // make username unique if already exists
+  usersRef.once("value", snap => {
+    if (snap.hasChild(name)) {
+      name = name + "_" + Math.floor(Math.random() * 1000);
+    }
 
-  document.getElementById("loginScreen").style.display = "none";
-  document.getElementById("listScreen").style.display = "block";
+    userId = name;
+    usersRef.child(userId).set(true);
 
-  loadUsers();
+    document.getElementById("loginScreen").style.display = "none";
+    document.getElementById("listScreen").style.display = "block";
+
+    loadUsers();
+  });
 }
 
 function loadUsers() {
@@ -104,6 +116,10 @@ function loadUsers() {
       userList.appendChild(div);
     });
   });
+}
+
+function refreshUsers() {
+  loadUsers();
 }
 
 function openChat(otherUser) {
@@ -140,6 +156,14 @@ function sendMessage() {
 
   db.push({ text, sender: userId });
   input.value = "";
+}
+
+function deleteChat() {
+  if (!currentChat) return;
+  if (confirm("Delete this chat?")) {
+    firebase.database().ref("chats/" + currentChat).remove();
+    document.getElementById("messages").innerHTML = "";
+  }
 }
 
 function back() {
