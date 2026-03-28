@@ -3,59 +3,76 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chat App with Login</title>
+<title>WhatsApp Style Chat</title>
 
 <style>
-body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
-.app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
-.center {display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;}
-input {padding:12px;margin:5px;border-radius:10px;border:none;background:#1a1a1a;color:white;width:85%;font-size:16px;}
-button {padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;margin-top:10px;width:85%;}
-.header {padding:15px;font-size:20px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;}
-.refresh {cursor:pointer;font-size:18px;}
+body {margin:0;font-family:Arial;background:#111;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
+.app {width:380px;height:680px;background:#0b141a;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
+
+/* HEADER */
+.header {background:#202c33;padding:15px;font-size:18px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;}
+.header-icons span {margin-left:10px;cursor:pointer;}
+
+/* CHAT LIST */
 .chat-list {flex:1;overflow-y:auto;}
-.chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #111;cursor:pointer;}
-.avatar {width:40px;height:40px;border-radius:50%;background:pink;margin-right:10px;}
+.chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #222;cursor:pointer;}
+.chat-item:hover {background:#1f2c33;}
+.avatar {width:45px;height:45px;border-radius:50%;background:#25d366;margin-right:10px;}
 .chat-info {flex:1;}
 .chat-name {font-weight:bold;}
+.chat-last {font-size:12px;color:#aaa;}
+
+/* CHAT SCREEN */
 .chat-screen {display:none;flex-direction:column;height:100%;}
-.messages {flex:1;padding:10px;overflow-y:auto;}
-.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;}
-.sent {background:#d4f1a7;color:black;margin-left:auto;}
-.received {background:#334155;}
-.input-box {display:flex;padding:10px;border-top:1px solid #111;}
-.input-box input {flex:1;padding:14px;font-size:16px;} /* bigger typing box */
-.input-box button {margin-left:5px;}
-.delete-icon {cursor:pointer;font-size:18px;color:red;}
+.messages {flex:1;padding:10px;overflow-y:auto;background:#0b141a;}
+.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;font-size:14px;}
+.sent {background:#005c4b;margin-left:auto;}
+.received {background:#202c33;}
+
+/* INPUT */
+.input-box {display:flex;padding:10px;background:#202c33;}
+.input-box input {flex:1;padding:12px;border-radius:20px;border:none;background:#2a3942;color:white;font-size:15px;}
+.input-box button {margin-left:8px;background:#25d366;border:none;padding:10px 15px;border-radius:50%;cursor:pointer;}
+
+/* LOGIN */
+.center {display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;}
+input.login {width:80%;padding:12px;border-radius:10px;border:none;background:#2a3942;color:white;}
+button.login {margin-top:10px;padding:10px 20px;border:none;background:#25d366;color:white;border-radius:10px;}
 </style>
 </head>
 <body>
 
 <div class="app">
 
-<!-- LOGIN SCREEN -->
+<!-- LOGIN -->
 <div id="loginScreen" class="center">
-  <h2>Login</h2>
-  <input id="username" placeholder="Enter username" />
-  <button onclick="login()">Enter Chat</button>
+  <h2>Welcome</h2>
+  <input id="username" class="login" placeholder="Enter name" />
+  <button class="login" onclick="login()">Continue</button>
 </div>
 
-<!-- USER LIST -->
+<!-- DASHBOARD -->
 <div id="listScreen" style="display:none">
-  <div class="header">Users <span class="refresh" onclick="refreshUsers()">🔄</span></div>
+  <div class="header">
+    WhatsApp
+    <div class="header-icons">
+      <span onclick="refreshUsers()">🔄</span>
+    </div>
+  </div>
   <div id="userList" class="chat-list"></div>
 </div>
 
 <!-- CHAT -->
 <div id="chatScreen" class="chat-screen">
   <div class="header">
-    <span onclick="back()">⬅ Back</span>
-    <span class="delete-icon" onclick="deleteChat()">🗑️</span>
+    <span onclick="back()">⬅</span>
+    <span id="chatName"></span>
+    <span onclick="deleteChat()">🗑️</span>
   </div>
   <div id="messages" class="messages"></div>
   <div class="input-box">
-    <input id="msgInput" placeholder="Type message..." />
-    <button onclick="sendMessage()">Send</button>
+    <input id="msgInput" placeholder="Message" />
+    <button onclick="sendMessage()">➤</button>
   </div>
 </div>
 
@@ -81,9 +98,8 @@ let db;
 
 function login() {
   let name = document.getElementById("username").value.trim();
-  if (!name) return alert("Enter username");
+  if (!name) return alert("Enter name");
 
-  // make username unique if already exists
   usersRef.once("value", snap => {
     if (snap.hasChild(name)) {
       name = name + "_" + Math.floor(Math.random() * 1000);
@@ -110,9 +126,14 @@ function loadUsers() {
 
       const div = document.createElement("div");
       div.className = "chat-item";
-      div.innerHTML = `<div class='avatar'></div><div class='chat-info'><div class='chat-name'>${id}</div></div>`;
-      div.onclick = () => openChat(id);
+      div.innerHTML = `
+        <div class='avatar'></div>
+        <div class='chat-info'>
+          <div class='chat-name'>${id}</div>
+          <div class='chat-last'>Tap to chat</div>
+        </div>`;
 
+      div.onclick = () => openChat(id);
       userList.appendChild(div);
     });
   });
@@ -126,6 +147,7 @@ function openChat(otherUser) {
   currentChat = userId < otherUser ? userId + "_" + otherUser : otherUser + "_" + userId;
   db = firebase.database().ref("chats/" + currentChat);
 
+  document.getElementById("chatName").innerText = otherUser;
   document.getElementById("listScreen").style.display = "none";
   document.getElementById("chatScreen").style.display = "flex";
 
@@ -160,7 +182,7 @@ function sendMessage() {
 
 function deleteChat() {
   if (!currentChat) return;
-  if (confirm("Delete this chat?")) {
+  if (confirm("Delete chat?")) {
     firebase.database().ref("chats/" + currentChat).remove();
     document.getElementById("messages").innerHTML = "";
   }
