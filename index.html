@@ -3,62 +3,211 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Advanced Chat App</title>
+<title>Anonymous Chat</title>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
 <style>
-body {margin:0;font-family:Arial;background:#111;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
-.app {width:380px;height:680px;background:#0b141a;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
-.header {background:#202c33;padding:15px;display:flex;justify-content:space-between;align-items:center;}
-.chat-list {flex:1;overflow-y:auto;}
-.chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #222;cursor:pointer;}
-.avatar {width:45px;height:45px;border-radius:50%;background:#25d366;margin-right:10px;}
-.chat-info {flex:1;}
-.chat-name {font-weight:bold;}
-.unread {background:red;color:white;border-radius:50%;padding:3px 7px;font-size:12px;}
-.chat-screen {display:none;flex-direction:column;height:100%;}
-.messages {flex:1;padding:10px;overflow-y:auto;}
-.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;}
-.sent {background:#005c4b;margin-left:auto;}
-.received {background:#202c33;}
-.input-box {display:flex;padding:10px;background:#202c33;}
-.input-box input {flex:1;padding:14px;border-radius:20px;border:none;background:#2a3942;color:white;font-size:15px;}
-.typing {font-size:12px;color:#aaa;padding-left:10px;}
+body {
+  margin: 0;
+  font-family: 'Roboto', sans-serif;
+  background: #e5ddd5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.app {
+  width: 400px;
+  height: 700px;
+  background: #fff;
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 15px rgba(0,0,0,0.2);
+}
+
+/* Header */
+.header {
+  background: #075E54;
+  color: white;
+  padding: 15px;
+  font-size: 20px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+}
+
+/* Search */
+.search {
+  padding: 10px;
+  background: #f0f0f0;
+}
+.search input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 20px;
+  border: none;
+  outline: none;
+  font-size: 14px;
+}
+
+/* Chat List */
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  background: #f7f7f7;
+}
+.chat-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid #e0e0e0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.chat-item:hover {
+  background: #e0f7fa;
+}
+.avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #ff4081;
+  margin-right: 12px;
+}
+.chat-info {
+  flex: 1;
+}
+.chat-name {
+  font-weight: 500;
+}
+.chat-msg {
+  font-size: 13px;
+  color: gray;
+  margin-top: 2px;
+}
+.time {
+  font-size: 12px;
+  color: gray;
+}
+
+/* Chat Screen */
+.chat-screen {
+  display: none;
+  flex-direction: column;
+  height: 100%;
+  background: #ece5dd;
+}
+
+/* Chat Header */
+.chat-header {
+  padding: 15px;
+  background: #075E54;
+  color: white;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* Messages */
+.messages {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.msg {
+  max-width: 70%;
+  padding: 10px;
+  border-radius: 10px;
+  margin: 5px 0;
+  position: relative;
+  word-wrap: break-word;
+}
+.sent {
+  background: #dcf8c6;
+  align-self: flex-end;
+}
+.received {
+  background: #fff;
+  align-self: flex-start;
+}
+
+/* Timestamp */
+.timestamp {
+  font-size: 10px;
+  color: gray;
+  text-align: right;
+  margin-top: 2px;
+}
+
+/* Input Box */
+.input-box {
+  display: flex;
+  padding: 10px;
+  border-top: 1px solid #ccc;
+  background: #f0f0f0;
+}
+.input-box input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 20px;
+  border: none;
+  outline: none;
+  font-size: 14px;
+}
+.input-box button {
+  margin-left: 5px;
+  padding: 10px 15px;
+  border-radius: 20px;
+  border: none;
+  background: #25D366;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
 </style>
 </head>
 <body>
 
 <div class="app">
 
-<div id="loginScreen" style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%">
-  <input id="username" placeholder="Enter name" />
-  <button onclick="login()">Enter</button>
-</div>
-
-<div id="listScreen" style="display:none">
-  <div class="header">
-    Chats 
-    <span onclick="searchUser()">🔍</span>
-    <span onclick="findNearby()">📍</span>
+  <!-- Chat List -->
+  <div id="listScreen">
+    <div class="header">Chats</div>
+    <div class="search"><input placeholder="Search" /></div>
+    <div class="chat-list">
+      <div class="chat-item" onclick="openChat()">
+        <div class="avatar"></div>
+        <div class="chat-info">
+          <div class="chat-name">Anonymous Room</div>
+          <div class="chat-msg">Tap to chat</div>
+        </div>
+        <div class="time">Live</div>
+      </div>
+    </div>
   </div>
-  <div id="userList" class="chat-list"></div>
-</div>
 
-<div id="chatScreen" class="chat-screen">
-  <div class="header">
-    <span onclick="back()">⬅</span>
-    <span id="chatName"></span>
-    <span onclick="deleteChat()">🗑️</span>
+  <!-- Chat Screen -->
+  <div id="chatScreen" class="chat-screen">
+    <div class="chat-header" onclick="back()">⬅ Back</div>
+    <div id="messages" class="messages"></div>
+
+    <div class="input-box">
+      <input id="msgInput" placeholder="Type a message..." />
+      <button onclick="sendMessage()">Send</button>
+    </div>
   </div>
-  <div id="messages" class="messages"></div>
-  <div class="typing" id="typing"></div>
-  <div class="input-box">
-    <input id="msgInput" placeholder="Message" oninput="typingStatus(true)" />
-    <button onclick="sendMessage()">➤</button>
-  </div>
-</div>
 
 </div>
 
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
@@ -69,205 +218,58 @@ const firebaseConfig = {
   databaseURL: "https://fling-chat-95e81-default-rtdb.firebaseio.com/",
   projectId: "fling-chat-95e81",
 };
+
 firebase.initializeApp(firebaseConfig);
+const db = firebase.database().ref("chatroom");
 
-let userId="";
-let currentChat="";
-let db;
+// Random user ID
+const userId = "user_" + Math.floor(Math.random() * 10000);
 
-const usersRef=firebase.database().ref("users");
-const contactsRef=(id)=>firebase.database().ref("contacts/"+id);
-
-// ✅ LOGIN WITH LOCATION
-function login(){
- let name=document.getElementById("username").value.trim();
- if(!name)return;
-
- userId=name+"_"+Math.floor(Math.random()*1000);
-
- navigator.geolocation.getCurrentPosition(pos=>{
-   const {latitude, longitude} = pos.coords;
-
-   usersRef.child(userId).set({
-     lat: latitude,
-     lng: longitude
-   });
-
-   startApp();
-
- },()=>{
-   alert("Allow location to use nearby feature ⚠️");
- });
+function openChat() {
+  document.getElementById("listScreen").style.display = "none";
+  document.getElementById("chatScreen").style.display = "flex";
 }
 
-function startApp(){
- document.getElementById("loginScreen").style.display="none";
- document.getElementById("listScreen").style.display="block";
- loadUsers();
+function back() {
+  document.getElementById("listScreen").style.display = "block";
+  document.getElementById("chatScreen").style.display = "none";
 }
 
-// ✅ LOAD EXISTING CONTACTS
-function loadUsers(){
- contactsRef(userId).on("value",snap=>{
-  const list=document.getElementById("userList");
-  list.innerHTML="";
+function sendMessage() {
+  const input = document.getElementById("msgInput");
+  const text = input.value.trim();
+  if (!text) return;
 
-  if(!snap.exists()){
-    list.innerHTML="<p style='padding:10px;color:gray'>No chats yet</p>";
-    return;
-  }
+  const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
-  snap.forEach(c=>{
-    const id=c.key;
-
-    const div=document.createElement("div");
-    div.className="chat-item";
-    div.innerHTML=`
-      <div class="avatar"></div>
-      <div class="chat-info">
-        <div class="chat-name">${id}</div>
-      </div>
-      <div id="count_${id}" class="unread" style="display:none">0</div>
-    `;
-
-    div.onclick=()=>openChat(id);
-    list.appendChild(div);
+  db.push({
+    text: text,
+    sender: userId,
+    time: timestamp
   });
- });
+
+  input.value = "";
 }
 
-// ✅ SEARCH USER
-function searchUser(){
- let name=prompt("Enter exact username:");
- if(!name)return;
+// Receive messages
+const messagesDiv = document.getElementById("messages");
 
- usersRef.child(name).once("value",snap=>{
-  if(snap.exists()){
-    openChat(name);
-  }else{
-    alert("User not found ❌");
+db.on("child_added", snapshot => {
+  const data = snapshot.val();
+  const div = document.createElement("div");
+  div.classList.add("msg");
+
+  if (data.sender === userId) {
+    div.classList.add("sent");
+  } else {
+    div.classList.add("received");
   }
- });
-}
 
-// ✅ FIND NEARBY USERS
-function findNearby(){
- navigator.geolocation.getCurrentPosition(pos=>{
-   const myLat = pos.coords.latitude;
-   const myLng = pos.coords.longitude;
+  div.innerHTML = data.text + `<div class="timestamp">${data.time}</div>`;
+  messagesDiv.appendChild(div);
 
-   const list=document.getElementById("userList");
-   list.innerHTML="";
-
-   usersRef.once("value",snap=>{
-     snap.forEach(user=>{
-       const data=user.val();
-       const id=user.key;
-
-       if(id===userId || !data.lat) return;
-
-       const distance = getDistance(myLat,myLng,data.lat,data.lng);
-
-       if(distance <= 5){
-
-         const div=document.createElement("div");
-         div.className="chat-item";
-
-         div.innerHTML=`
-           <div class="avatar"></div>
-           <div class="chat-info">
-             <div class="chat-name">${id}</div>
-             <div style="font-size:12px;color:gray">${distance.toFixed(2)} km away</div>
-           </div>
-         `;
-
-         div.onclick=()=>openChat(id);
-         list.appendChild(div);
-       }
-     });
-
-     if(list.innerHTML===""){
-       list.innerHTML="<p style='padding:10px;color:gray'>No nearby users found</p>";
-     }
-   });
-
- });
-}
-
-// ✅ DISTANCE FUNCTION
-function getDistance(lat1, lon1, lat2, lon2){
- const R = 6371;
- const dLat = (lat2-lat1) * Math.PI/180;
- const dLon = (lon2-lon1) * Math.PI/180;
-
- const a =
-   Math.sin(dLat/2)*Math.sin(dLat/2) +
-   Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180) *
-   Math.sin(dLon/2)*Math.sin(dLon/2);
-
- const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
- return R * c;
-}
-
-// ✅ CHAT SYSTEM
-function openChat(other){
- contactsRef(userId).child(other).set(true);
- contactsRef(other).child(userId).set(true);
-
- currentChat=userId<other?userId+"_"+other:other+"_"+userId;
- db=firebase.database().ref("chats/"+currentChat);
-
- document.getElementById("chatName").innerText=other;
- document.getElementById("listScreen").style.display="none";
- document.getElementById("chatScreen").style.display="flex";
-
- const msgDiv=document.getElementById("messages");
- msgDiv.innerHTML="";
-
- db.off();
-
- db.on("child_added",snap=>{
-  const d=snap.val();
-  if(!d || !d.text) return;
-
-  const div=document.createElement("div");
-  div.className="msg "+(d.sender===userId?"sent":"received");
-  div.innerText=d.text;
-
-  msgDiv.appendChild(div);
-  msgDiv.scrollTop=msgDiv.scrollHeight;
- });
-
- db.child("typing").on("value",snap=>{
-  document.getElementById("typing").innerText =
-    (snap.val() && snap.val()!==userId) ? "Typing..." : "";
- });
-}
-
-function sendMessage(){
- const input=document.getElementById("msgInput");
- const text=input.value.trim();
- if(!text)return;
- db.push({text:text, sender:userId});
- input.value="";
- typingStatus(false);
-}
-
-function typingStatus(status){
- if(db) db.child("typing").set(status?userId:null);
-}
-
-function deleteChat(){
- if(currentChat && confirm("Delete chat?")){
-  firebase.database().ref("chats/"+currentChat).remove();
-  document.getElementById("messages").innerHTML="";
- }
-}
-
-function back(){
- document.getElementById("chatScreen").style.display="none";
- document.getElementById("listScreen").style.display="block";
-}
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+});
 </script>
 
 </body>
