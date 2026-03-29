@@ -8,7 +8,7 @@
 <style>
 body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
 .app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
-.header {padding:15px;font-size:20px;font-weight:bold;background:#111;}
+.header {padding:15px;font-size:20px;font-weight:bold;background:#111;display:flex;justify-content:space-between;align-items:center;}
 .username-screen {display:flex;flex-direction:column;flex:1;justify-content:center;align-items:center;}
 .username-screen input, .username-screen select {padding:10px;width:80%;border-radius:10px;border:none;margin-bottom:10px;}
 .username-screen button {padding:10px 20px;border:none;border-radius:10px;background:#22c55e;color:black;font-weight:bold;cursor:pointer;}
@@ -22,9 +22,7 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
 .input-box {display:flex;padding:10px;border-top:1px solid #333;}
 .input-box input {flex:1;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
 .input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
-.call-box {display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #333;}
-.call-box button {padding:5px 10px;border:none;border-radius:5px;color:white;cursor:pointer;}
-#remoteAudio {display:none;}
+.search-btn {padding:5px 8px;border:none;border-radius:5px;background:#3b82f6;color:white;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -34,22 +32,16 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
   <!-- Username & Room Entry -->
   <div id="usernameScreen" class="username-screen">
     <input id="usernameInput" placeholder="Enter your name..." />
-    <select id="roomSelect">
-      <option value="room1">Room 1</option>
-      <option value="room2">Room 2</option>
-      <option value="room3">Room 3</option>
-    </select>
+    <input id="latInput" type="number" placeholder="Latitude" />
+    <input id="lngInput" type="number" placeholder="Longitude" />
     <button onclick="enterChat()">Join Chat</button>
   </div>
 
   <!-- Chat Screen -->
   <div id="chatScreen" class="chat-screen">
-    <div class="header" id="roomHeader">Chat Room</div>
-
-    <!-- Audio Call Buttons -->
-    <div class="call-box">
-      <button id="startCallBtn" style="background:#3b82f6;">Start Call</button>
-      <button id="endCallBtn" style="background:#ef4444;" disabled>End Call</button>
+    <div class="header">
+      <span id="roomHeader">Chat</span>
+      <button class="search-btn" onclick="searchNearby()">🔍 Nearby</button>
     </div>
 
     <div id="messages" class="messages"></div>
@@ -61,8 +53,6 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
   </div>
 
 </div>
-
-<audio id="remoteAudio" autoplay></audio>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
@@ -77,40 +67,30 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 
-let username = "", userId = "", currentRoom = "";
-let db, onlineRef, callRef;
-
-// DOM Elements
-const messagesDiv = document.getElementById("messages");
-const startCallBtn = document.getElementById("startCallBtn");
-const endCallBtn = document.getElementById("endCallBtn");
-const remoteAudio = document.getElementById("remoteAudio");
-
-let localStream, peerConnection;
-const config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+let username = "", userId = "", userLat = 0, userLng = 0;
+let db, onlineRef, messagesDiv = document.getElementById("messages");
 
 // --- Enter Chat ---
 function enterChat() {
   username = document.getElementById("usernameInput").value.trim();
-  currentRoom = document.getElementById("roomSelect").value;
-  if(!username) { alert("Enter a name"); return; }
+  userLat = parseFloat(document.getElementById("latInput").value);
+  userLng = parseFloat(document.getElementById("lngInput").value);
+
+  if(!username || !userLat || !userLng) { alert("Enter name & coordinates"); return; }
 
   userId = "user_" + Math.floor(Math.random()*100000);
+  db = firebase.database().ref("chatrooms/newusers");
+  onlineRef = firebase.database().ref("chatrooms/online");
 
-  db = firebase.database().ref("chatrooms/" + currentRoom + "/messages");
-  onlineRef = firebase.database().ref("chatrooms/" + currentRoom + "/online");
-  callRef = firebase.database().ref("chatrooms/" + currentRoom + "/calls");
-
-  // Delete previous messages on new join
-  db.remove();
-
-  // Online status
-  onlineRef.child(userId).set({username});
+  // Set user online with location
+  onlineRef.child(userId).set({username, lat:userLat, lng:userLng});
   onlineRef.child(userId).onDisconnect().remove();
 
-  document.getElementById("roomHeader").innerText = "Room: " + currentRoom;
   document.getElementById("usernameScreen").style.display = "none";
   document.getElementById("chatScreen").style.display = "flex";
+
+  // Clear messages (no previous chat history)
+  messagesDiv.innerHTML = "";
 
   loadMessages();
 }
@@ -130,7 +110,7 @@ function sendMessage() {
   input.value = "";
 }
 
-// --- Load Messages & Handle Ticks ---
+// --- Load Messages with ticks ---
 function loadMessages() {
   db.on("child_added", snapshot => {
     const data = snapshot.val();
@@ -139,19 +119,21 @@ function loadMessages() {
 
     const nameDiv = document.createElement("div");
     nameDiv.classList.add("msg-username");
-    nameDiv.innerText = data.sender === userId ? "You" : data.username;
+    nameDiv.innerText = data.sender===userId ? "You" : data.username;
     div.appendChild(nameDiv);
 
     const textDiv = document.createElement("div");
     textDiv.innerText = data.text + " (" + data.time + ")";
     div.appendChild(textDiv);
 
-    if(data.sender === userId) {
-      const tickDiv = document.createElement("span");
-      tickDiv.classList.add("tick");
-      tickDiv.innerText = data.delivered ? "✔✔" : "✔";
-      div.appendChild(tickDiv);
+    const tickDiv = document.createElement("span");
+    tickDiv.classList.add("tick");
+    tickDiv.innerText = data.sender===userId ? (data.delivered?"✔✔":"✔") : "";
+    div.appendChild(tickDiv);
+
+    if(data.sender===userId && !data.delivered){
       snapshot.ref.update({delivered:true});
+      tickDiv.innerText = "✔✔";
     }
 
     div.classList.add(data.sender===userId?"sent":"received");
@@ -160,68 +142,30 @@ function loadMessages() {
   });
 }
 
-// --- Audio Call ---
-async function startCall() {
-  startCallBtn.disabled = true;
-  endCallBtn.disabled = false;
-
-  localStream = await navigator.mediaDevices.getUserMedia({audio:true});
-  peerConnection = new RTCPeerConnection(config);
-  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-  peerConnection.ontrack = e => { remoteAudio.srcObject = e.streams[0]; };
-
-  peerConnection.onicecandidate = event => {
-    if(event.candidate) callRef.push({candidate:event.candidate.toJSON(), sender:userId});
-  };
-
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-  callRef.push({type:"offer", sdp:offer.sdp, sender:userId});
+// --- Nearby Users Search ---
+function searchNearby() {
+  onlineRef.once("value").then(snap => {
+    const users = snap.val();
+    const nearbyUsers = [];
+    for(let id in users){
+      if(id===userId) continue;
+      const dist = getDistance(userLat,userLng,users[id].lat,users[id].lng);
+      if(dist<=100) nearbyUsers.push(users[id].username);
+    }
+    if(nearbyUsers.length) alert("Nearby Users: " + nearbyUsers.join(", "));
+    else alert("No nearby users within 100 km");
+  });
 }
 
-async function endCall() {
-  peerConnection?.close();
-  localStream?.getTracks().forEach(track => track.stop());
-  peerConnection = null;
-  startCallBtn.disabled = false;
-  endCallBtn.disabled = true;
-  callRef.remove();
+// --- Haversine formula for distance in km ---
+function getDistance(lat1, lon1, lat2, lon2){
+  const R = 6371;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R*c;
 }
-
-startCallBtn.onclick = startCall;
-endCallBtn.onclick = endCall;
-
-// --- Listen for incoming calls ---
-callRef && callRef.on("child_added", async snapshot => {
-  const data = snapshot.val();
-  if(!peerConnection && data.type==="offer" && data.sender!==userId){
-    peerConnection = new RTCPeerConnection(config);
-    peerConnection.ontrack = e => { remoteAudio.srcObject = e.streams[0]; };
-
-    localStream = await navigator.mediaDevices.getUserMedia({audio:true});
-    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-    peerConnection.onicecandidate = e=>{
-      if(e.candidate) callRef.push({candidate:e.candidate.toJSON(), sender:userId});
-    };
-
-    await peerConnection.setRemoteDescription({type:"offer", sdp:data.sdp});
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    callRef.push({type:"answer", sdp:answer.sdp, sender:userId});
-
-    startCallBtn.disabled = true;
-    endCallBtn.disabled = false;
-  }
-
-  if(peerConnection && data.type==="answer" && data.sender!==userId){
-    await peerConnection.setRemoteDescription({type:"answer", sdp:data.sdp});
-  }
-
-  if(peerConnection && data.candidate && data.sender!==userId){
-    await peerConnection.addIceCandidate(data.candidate);
-  }
-});
 </script>
 
 </body>
