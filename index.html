@@ -19,7 +19,7 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
 .sent {background:#22c55e;color:black;margin-left:auto;}
 .received {background:#444;color:white;margin-right:auto;}
 .msg-username {font-size:10px;color:gray;margin-bottom:2px;}
-.tick {font-size:10px;color:gray;margin-left:5px;}
+.tick {font-size:12px;color:gray;margin-left:5px;}
 .input-box {display:flex;padding:10px;border-top:1px solid #333;}
 .input-box input {flex:1;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
 .input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
@@ -72,7 +72,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 let username = "", userId = "", userLat = 0, userLng = 0;
-let sessionMessages = []; // store messages for current session only
+let sessionMessages = []; 
 let db, onlineRef, messagesDiv = document.getElementById("messages"), userListDiv = document.getElementById("userList");
 
 // --- Enter Chat ---
@@ -84,20 +84,17 @@ function enterChat() {
   db = firebase.database().ref("chatrooms/newusers");
   onlineRef = firebase.database().ref("chatrooms/online");
 
-  // Get user location from browser
   if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(pos=>{
       userLat = pos.coords.latitude;
       userLng = pos.coords.longitude;
 
-      // Set user online with location
       onlineRef.child(userId).set({username, lat:userLat, lng:userLng});
       onlineRef.child(userId).onDisconnect().remove();
 
       document.getElementById("usernameScreen").style.display = "none";
       document.getElementById("chatScreen").style.display = "flex";
 
-      // Clear old session messages
       messagesDiv.innerHTML = "";
       sessionMessages = [];
       userListDiv.style.display = "none";
@@ -127,9 +124,8 @@ function sendMessage() {
   if(!text) return;
 
   const timestamp = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-  const msgObj = {text, sender:userId, username, time:timestamp};
+  const msgObj = {text, sender:userId, username, time:timestamp, delivered:false};
 
-  // Add to session messages only
   sessionMessages.push(msgObj);
   renderMessage(msgObj);
   input.value = "";
@@ -149,12 +145,25 @@ function renderMessage(data){
   textDiv.innerText = data.text + " (" + data.time + ")";
   div.appendChild(textDiv);
 
+  const tickDiv = document.createElement("span");
+  tickDiv.classList.add("tick");
+  tickDiv.innerText = data.sender===userId ? (data.delivered ? "✔✔" : "✔") : "";
+  div.appendChild(tickDiv);
+
   div.classList.add(data.sender===userId?"sent":"received");
   messagesDiv.appendChild(div);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+  // Simulate delivery after 1s for demo
+  if(data.sender===userId && !data.delivered){
+    setTimeout(()=>{
+      data.delivered = true;
+      tickDiv.innerText = "✔✔";
+    }, 1000);
+  }
 }
 
-// --- Nearby Users Search ---
+// --- Nearby Users Search (unique only) ---
 function searchNearby() {
   if(!navigator.geolocation){
     alert("Geolocation not supported");
@@ -167,12 +176,16 @@ function searchNearby() {
     onlineRef.once("value").then(snap => {
       const users = snap.val();
       userListDiv.innerHTML = "";
+      let seen = new Set();
       let hasNearby = false;
+
       for(let id in users){
         if(id===userId) continue;
+        if(seen.has(users[id].username)) continue; // skip duplicate names
         const dist = getDistance(lat,lng,users[id].lat,users[id].lng);
         if(dist<=100){
           hasNearby = true;
+          seen.add(users[id].username);
           const div = document.createElement("div");
           div.classList.add("user-item");
           div.innerText = users[id].username;
@@ -188,9 +201,8 @@ function searchNearby() {
   });
 }
 
-// --- Start Private Chat Placeholder ---
+// --- Start Private Chat ---
 function startPrivateChat(name){
-  // For now, clear old messages and start new session
   messagesDiv.innerHTML = "";
   sessionMessages = [];
   alert("Starting new conversation with " + name);
