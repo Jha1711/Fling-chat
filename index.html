@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fling Chat</title>
+<title>Anonymous Multi-Chat Rooms</title>
 
 <style>
 body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
@@ -12,18 +12,19 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
 /* Header */
 .header {padding:15px;font-size:20px;font-weight:bold;background:#111;}
 
-/* Username Entry */
+/* Username & Room Entry */
 .username-screen {display:flex;flex-direction:column;flex:1;justify-content:center;align-items:center;}
-.username-screen input {padding:10px;width:80%;border-radius:10px;border:none;margin-bottom:10px;}
+.username-screen input, .username-screen select {padding:10px;width:80%;border-radius:10px;border:none;margin-bottom:10px;}
 .username-screen button {padding:10px 20px;border:none;border-radius:10px;background:#22c55e;color:black;font-weight:bold;cursor:pointer;}
 
-/* Chat List & Screen */
+/* Chat Screen */
 .chat-screen {display:none;flex-direction:column;height:100%;}
 .messages {flex:1;padding:10px;overflow-y:auto;background:#121212;}
 .msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;word-wrap:break-word;position:relative;}
 .sent {background:#22c55e;color:black;margin-left:auto;}
 .received {background:#444;color:white;margin-right:auto;}
 .msg-username {font-size:10px;color:gray;margin-bottom:2px;}
+.tick {font-size:10px;color:gray;margin-left:5px;}
 .input-box {display:flex;padding:10px;border-top:1px solid #333;}
 .input-box input {flex:1;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
 .input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
@@ -33,15 +34,20 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
 
 <div class="app">
 
-  <!-- Username Entry -->
+  <!-- Username & Room Entry -->
   <div id="usernameScreen" class="username-screen">
     <input id="usernameInput" placeholder="Enter your name..." />
+    <select id="roomSelect">
+      <option value="room1">Room 1</option>
+      <option value="room2">Room 2</option>
+      <option value="room3">Room 3</option>
+    </select>
     <button onclick="enterChat()">Join Chat</button>
   </div>
 
   <!-- Chat Screen -->
   <div id="chatScreen" class="chat-screen">
-    <div class="header">Anonymous Chat</div>
+    <div class="header" id="roomHeader">Chat Room</div>
     <div id="messages" class="messages"></div>
     <div class="input-box">
       <input id="msgInput" placeholder="Type a message..." />
@@ -63,23 +69,36 @@ const firebaseConfig = {
   projectId: "fling-chat-95e81",
 };
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database().ref("chatroom");
 
-// User info
 let username = "";
 let userId = "";
+let currentRoom = "";
+let db, onlineRef;
 
 // Enter Chat
 function enterChat() {
-  const input = document.getElementById("usernameInput");
-  username = input.value.trim();
+  username = document.getElementById("usernameInput").value.trim();
+  currentRoom = document.getElementById("roomSelect").value;
   if (!username) { alert("Enter a name"); return; }
 
-  // Assign random ID per session
-  userId = "user_" + Math.floor(Math.random() * 100000);
+  userId = "user_" + Math.floor(Math.random()*100000);
 
+  // Point to room
+  db = firebase.database().ref("chatrooms/" + currentRoom + "/messages");
+  onlineRef = firebase.database().ref("chatrooms/" + currentRoom + "/online");
+
+  // Delete previous messages when new user joins
+  db.remove();
+
+  // Set user online
+  onlineRef.child(userId).set({username: username});
+  onlineRef.child(userId).onDisconnect().remove();
+
+  document.getElementById("roomHeader").innerText = "Room: " + currentRoom;
   document.getElementById("usernameScreen").style.display = "none";
   document.getElementById("chatScreen").style.display = "flex";
+
+  loadMessages();
 }
 
 // Send Message
@@ -88,46 +107,55 @@ function sendMessage() {
   const text = input.value.trim();
   if (!text) return;
 
-  const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  const timestamp = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
 
-  db.push({
+  // Push message with "delivered" tick false
+  const msgRef = db.push({
     text: text,
     sender: userId,
     username: username,
-    time: timestamp
+    time: timestamp,
+    delivered: false
   });
 
   input.value = "";
 }
 
-// Receive Messages
-const messagesDiv = document.getElementById("messages");
+// Load Messages & handle ticks
+function loadMessages() {
+  const messagesDiv = document.getElementById("messages");
+  db.on("child_added", snapshot => {
+    const data = snapshot.val();
+    const div = document.createElement("div");
+    div.classList.add("msg");
 
-db.on("child_added", snapshot => {
-  const data = snapshot.val();
-  const div = document.createElement("div");
-  div.classList.add("msg");
+    const nameDiv = document.createElement("div");
+    nameDiv.classList.add("msg-username");
+    nameDiv.innerText = (data.sender === userId) ? "You" : data.username;
+    div.appendChild(nameDiv);
 
-  // Show username for others
-  const nameDiv = document.createElement("div");
-  nameDiv.classList.add("msg-username");
-  nameDiv.innerText = data.username;
+    const textDiv = document.createElement("div");
+    textDiv.innerText = data.text + " (" + data.time + ")";
+    div.appendChild(textDiv);
 
-  if (data.sender === userId) {
-    div.classList.add("sent");
-    nameDiv.innerText = "You";
-  } else {
-    div.classList.add("received");
-  }
+    // Tick mark for delivered
+    if (data.sender === userId) {
+      const tickDiv = document.createElement("span");
+      tickDiv.classList.add("tick");
+      tickDiv.innerText = data.delivered ? "✔✔" : "✔";
+      div.appendChild(tickDiv);
 
-  div.appendChild(nameDiv);
-  const textDiv = document.createElement("div");
-  textDiv.innerText = data.text + " (" + data.time + ")";
-  div.appendChild(textDiv);
+      // Update delivered
+      snapshot.ref.update({delivered: true});
+    }
 
-  messagesDiv.appendChild(div);
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-});
+    div.classList.add(data.sender === userId ? "sent" : "received");
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  });
+}
+
+// Optional: track online users (display in console)
 </script>
 
 </body>
