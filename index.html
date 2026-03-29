@@ -8,16 +8,10 @@
 <style>
 body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
 .app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
-
-/* Header */
 .header {padding:15px;font-size:20px;font-weight:bold;background:#111;}
-
-/* Username & Room Entry */
 .username-screen {display:flex;flex-direction:column;flex:1;justify-content:center;align-items:center;}
 .username-screen input, .username-screen select {padding:10px;width:80%;border-radius:10px;border:none;margin-bottom:10px;}
 .username-screen button {padding:10px 20px;border:none;border-radius:10px;background:#22c55e;color:black;font-weight:bold;cursor:pointer;}
-
-/* Chat Screen */
 .chat-screen {display:none;flex-direction:column;height:100%;}
 .messages {flex:1;padding:10px;overflow-y:auto;background:#121212;}
 .msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;word-wrap:break-word;position:relative;}
@@ -28,6 +22,9 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
 .input-box {display:flex;padding:10px;border-top:1px solid #333;}
 .input-box input {flex:1;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
 .input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
+.call-box {display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #333;}
+.call-box button {padding:5px 10px;border:none;border-radius:5px;color:white;cursor:pointer;}
+#remoteAudio {display:none;}
 </style>
 </head>
 <body>
@@ -48,7 +45,15 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
   <!-- Chat Screen -->
   <div id="chatScreen" class="chat-screen">
     <div class="header" id="roomHeader">Chat Room</div>
+
+    <!-- Audio Call Buttons -->
+    <div class="call-box">
+      <button id="startCallBtn" style="background:#3b82f6;">Start Call</button>
+      <button id="endCallBtn" style="background:#ef4444;" disabled>End Call</button>
+    </div>
+
     <div id="messages" class="messages"></div>
+
     <div class="input-box">
       <input id="msgInput" placeholder="Type a message..." />
       <button onclick="sendMessage()">Send</button>
@@ -56,6 +61,8 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
   </div>
 
 </div>
+
+<audio id="remoteAudio" autoplay></audio>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
@@ -70,28 +77,35 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 
-let username = "";
-let userId = "";
-let currentRoom = "";
-let db, onlineRef;
+let username = "", userId = "", currentRoom = "";
+let db, onlineRef, callRef;
 
-// Enter Chat
+// DOM Elements
+const messagesDiv = document.getElementById("messages");
+const startCallBtn = document.getElementById("startCallBtn");
+const endCallBtn = document.getElementById("endCallBtn");
+const remoteAudio = document.getElementById("remoteAudio");
+
+let localStream, peerConnection;
+const config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+// --- Enter Chat ---
 function enterChat() {
   username = document.getElementById("usernameInput").value.trim();
   currentRoom = document.getElementById("roomSelect").value;
-  if (!username) { alert("Enter a name"); return; }
+  if(!username) { alert("Enter a name"); return; }
 
   userId = "user_" + Math.floor(Math.random()*100000);
 
-  // Point to room
   db = firebase.database().ref("chatrooms/" + currentRoom + "/messages");
   onlineRef = firebase.database().ref("chatrooms/" + currentRoom + "/online");
+  callRef = firebase.database().ref("chatrooms/" + currentRoom + "/calls");
 
-  // Delete previous messages when new user joins
+  // Delete previous messages on new join
   db.remove();
 
-  // Set user online
-  onlineRef.child(userId).set({username: username});
+  // Online status
+  onlineRef.child(userId).set({username});
   onlineRef.child(userId).onDisconnect().remove();
 
   document.getElementById("roomHeader").innerText = "Room: " + currentRoom;
@@ -101,29 +115,23 @@ function enterChat() {
   loadMessages();
 }
 
-// Send Message
+// --- Send Message ---
 function sendMessage() {
   const input = document.getElementById("msgInput");
   const text = input.value.trim();
-  if (!text) return;
+  if(!text) return;
 
   const timestamp = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
 
-  // Push message with "delivered" tick false
   const msgRef = db.push({
-    text: text,
-    sender: userId,
-    username: username,
-    time: timestamp,
-    delivered: false
+    text, sender:userId, username, time:timestamp, delivered:false
   });
 
   input.value = "";
 }
 
-// Load Messages & handle ticks
+// --- Load Messages & Handle Ticks ---
 function loadMessages() {
-  const messagesDiv = document.getElementById("messages");
   db.on("child_added", snapshot => {
     const data = snapshot.val();
     const div = document.createElement("div");
@@ -131,31 +139,89 @@ function loadMessages() {
 
     const nameDiv = document.createElement("div");
     nameDiv.classList.add("msg-username");
-    nameDiv.innerText = (data.sender === userId) ? "You" : data.username;
+    nameDiv.innerText = data.sender === userId ? "You" : data.username;
     div.appendChild(nameDiv);
 
     const textDiv = document.createElement("div");
     textDiv.innerText = data.text + " (" + data.time + ")";
     div.appendChild(textDiv);
 
-    // Tick mark for delivered
-    if (data.sender === userId) {
+    if(data.sender === userId) {
       const tickDiv = document.createElement("span");
       tickDiv.classList.add("tick");
       tickDiv.innerText = data.delivered ? "✔✔" : "✔";
       div.appendChild(tickDiv);
-
-      // Update delivered
-      snapshot.ref.update({delivered: true});
+      snapshot.ref.update({delivered:true});
     }
 
-    div.classList.add(data.sender === userId ? "sent" : "received");
+    div.classList.add(data.sender===userId?"sent":"received");
     messagesDiv.appendChild(div);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
   });
 }
 
-// Optional: track online users (display in console)
+// --- Audio Call ---
+async function startCall() {
+  startCallBtn.disabled = true;
+  endCallBtn.disabled = false;
+
+  localStream = await navigator.mediaDevices.getUserMedia({audio:true});
+  peerConnection = new RTCPeerConnection(config);
+  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+  peerConnection.ontrack = e => { remoteAudio.srcObject = e.streams[0]; };
+
+  peerConnection.onicecandidate = event => {
+    if(event.candidate) callRef.push({candidate:event.candidate.toJSON(), sender:userId});
+  };
+
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+  callRef.push({type:"offer", sdp:offer.sdp, sender:userId});
+}
+
+async function endCall() {
+  peerConnection?.close();
+  localStream?.getTracks().forEach(track => track.stop());
+  peerConnection = null;
+  startCallBtn.disabled = false;
+  endCallBtn.disabled = true;
+  callRef.remove();
+}
+
+startCallBtn.onclick = startCall;
+endCallBtn.onclick = endCall;
+
+// --- Listen for incoming calls ---
+callRef && callRef.on("child_added", async snapshot => {
+  const data = snapshot.val();
+  if(!peerConnection && data.type==="offer" && data.sender!==userId){
+    peerConnection = new RTCPeerConnection(config);
+    peerConnection.ontrack = e => { remoteAudio.srcObject = e.streams[0]; };
+
+    localStream = await navigator.mediaDevices.getUserMedia({audio:true});
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+    peerConnection.onicecandidate = e=>{
+      if(e.candidate) callRef.push({candidate:e.candidate.toJSON(), sender:userId});
+    };
+
+    await peerConnection.setRemoteDescription({type:"offer", sdp:data.sdp});
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    callRef.push({type:"answer", sdp:answer.sdp, sender:userId});
+
+    startCallBtn.disabled = true;
+    endCallBtn.disabled = false;
+  }
+
+  if(peerConnection && data.type==="answer" && data.sender!==userId){
+    await peerConnection.setRemoteDescription({type:"answer", sdp:data.sdp});
+  }
+
+  if(peerConnection && data.candidate && data.sender!==userId){
+    await peerConnection.addIceCandidate(data.candidate);
+  }
+});
 </script>
 
 </body>
