@@ -72,6 +72,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 let username = "", userId = "", userLat = 0, userLng = 0;
+let sessionMessages = []; // store messages for current session only
 let db, onlineRef, messagesDiv = document.getElementById("messages"), userListDiv = document.getElementById("userList");
 
 // --- Enter Chat ---
@@ -96,9 +97,11 @@ function enterChat() {
       document.getElementById("usernameScreen").style.display = "none";
       document.getElementById("chatScreen").style.display = "flex";
 
+      // Clear old session messages
       messagesDiv.innerHTML = "";
+      sessionMessages = [];
       userListDiv.style.display = "none";
-      loadMessages();
+
     }, err=>{
       alert("Geolocation is required to find nearby users.");
     });
@@ -114,6 +117,7 @@ function goHome() {
   messagesDiv.innerHTML = "";
   userListDiv.innerHTML = "";
   userListDiv.style.display = "none";
+  sessionMessages = [];
 }
 
 // --- Send Message ---
@@ -123,40 +127,31 @@ function sendMessage() {
   if(!text) return;
 
   const timestamp = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-  db.push({text, sender:userId, username, time:timestamp, delivered:false});
+  const msgObj = {text, sender:userId, username, time:timestamp};
+
+  // Add to session messages only
+  sessionMessages.push(msgObj);
+  renderMessage(msgObj);
   input.value = "";
 }
 
-// --- Load Messages with ticks ---
-function loadMessages() {
-  db.on("child_added", snapshot => {
-    const data = snapshot.val();
-    const div = document.createElement("div");
-    div.classList.add("msg");
+// --- Render Message ---
+function renderMessage(data){
+  const div = document.createElement("div");
+  div.classList.add("msg");
 
-    const nameDiv = document.createElement("div");
-    nameDiv.classList.add("msg-username");
-    nameDiv.innerText = data.sender===userId ? "You" : data.username;
-    div.appendChild(nameDiv);
+  const nameDiv = document.createElement("div");
+  nameDiv.classList.add("msg-username");
+  nameDiv.innerText = data.sender===userId ? "You" : data.username;
+  div.appendChild(nameDiv);
 
-    const textDiv = document.createElement("div");
-    textDiv.innerText = data.text + " (" + data.time + ")";
-    div.appendChild(textDiv);
+  const textDiv = document.createElement("div");
+  textDiv.innerText = data.text + " (" + data.time + ")";
+  div.appendChild(textDiv);
 
-    const tickDiv = document.createElement("span");
-    tickDiv.classList.add("tick");
-    tickDiv.innerText = data.sender===userId ? (data.delivered?"✔✔":"✔") : "";
-    div.appendChild(tickDiv);
-
-    if(data.sender===userId && !data.delivered){
-      snapshot.ref.update({delivered:true});
-      tickDiv.innerText = "✔✔";
-    }
-
-    div.classList.add(data.sender===userId?"sent":"received");
-    messagesDiv.appendChild(div);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  });
+  div.classList.add(data.sender===userId?"sent":"received");
+  messagesDiv.appendChild(div);
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
 // --- Nearby Users Search ---
@@ -171,13 +166,13 @@ function searchNearby() {
 
     onlineRef.once("value").then(snap => {
       const users = snap.val();
-      const nearbyUsers = [];
       userListDiv.innerHTML = "";
+      let hasNearby = false;
       for(let id in users){
         if(id===userId) continue;
         const dist = getDistance(lat,lng,users[id].lat,users[id].lng);
         if(dist<=100){
-          nearbyUsers.push({id, name:users[id].username});
+          hasNearby = true;
           const div = document.createElement("div");
           div.classList.add("user-item");
           div.innerText = users[id].username;
@@ -185,8 +180,8 @@ function searchNearby() {
           userListDiv.appendChild(div);
         }
       }
-      if(nearbyUsers.length) userListDiv.style.display = "block";
-      else { userListDiv.style.display = "none"; alert("No nearby users within 100 km"); }
+      userListDiv.style.display = hasNearby ? "block" : "none";
+      if(!hasNearby) alert("No nearby users within 100 km");
     });
   }, err=>{
     alert("Cannot access location");
@@ -195,7 +190,10 @@ function searchNearby() {
 
 // --- Start Private Chat Placeholder ---
 function startPrivateChat(name){
-  alert("Start chat with " + name);
+  // For now, clear old messages and start new session
+  messagesDiv.innerHTML = "";
+  sessionMessages = [];
+  alert("Starting new conversation with " + name);
 }
 
 // --- Haversine formula ---
