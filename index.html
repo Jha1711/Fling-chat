@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Anonymous Chat UI</title>
 
-
 <style>
 body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
 .app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
@@ -30,17 +29,15 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
 .input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
 </style>
 </head>
+
 <body>
 
-
 <div class="app">
-
 
   <!-- Chat List -->
   <div id="listScreen">
     <div class="header">Chats</div>
     <div class="search"><input placeholder="Search" /></div>
-
 
     <div class="chat-list">
       <div class="chat-item" onclick="openChat()">
@@ -54,12 +51,10 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
     </div>
   </div>
 
-
   <!-- Chat Screen -->
   <div id="chatScreen" class="chat-screen">
     <div class="chat-header" onclick="back()">⬅ Back</div>
     <div id="messages" class="messages"></div>
-
 
     <div class="input-box">
       <input id="msgInput" placeholder="Type message..." />
@@ -67,17 +62,14 @@ body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify
     </div>
   </div>
 
-
 </div>
-
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-
 <script>
-// 🔴 PASTE YOUR FIREBASE CONFIG HERE
+// 🔴 YOUR FIREBASE CONFIG
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "fling-chat-95e81.firebaseapp.com",
@@ -85,54 +77,61 @@ const firebaseConfig = {
   projectId: "fling-chat-95e81",
 };
 
-
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database().ref("chatroom");
 
+const rootRef = firebase.database();
+const chatRef = rootRef.ref("chatroom");
+const metaRef = rootRef.ref("meta/lastReset");
+
+// ✅ CONTROLLED GLOBAL DELETE (only once per minute)
+metaRef.once("value", snap => {
+  const last = snap.val() || 0;
+  const now = Date.now();
+
+  if (now - last > 60000) {
+    chatRef.remove().then(() => {
+      console.log("Chat cleared globally");
+      metaRef.set(now);
+    });
+  }
+});
 
 // Random user ID
 const userId = "user_" + Math.floor(Math.random() * 10000);
 
-
+// UI functions
 function openChat() {
   document.getElementById("listScreen").style.display = "none";
   document.getElementById("chatScreen").style.display = "flex";
 }
-
 
 function back() {
   document.getElementById("listScreen").style.display = "block";
   document.getElementById("chatScreen").style.display = "none";
 }
 
-
+// Send message
 function sendMessage() {
   const input = document.getElementById("msgInput");
   const text = input.value.trim();
   if (!text) return;
 
-
-  db.push({
+  chatRef.push({
     text: text,
     sender: userId
   });
 
-
   input.value = "";
 }
-
 
 // Receive messages
 const messagesDiv = document.getElementById("messages");
 
-
-db.on("child_added", snapshot => {
+chatRef.on("child_added", snapshot => {
   const data = snapshot.val();
-
 
   const div = document.createElement("div");
   div.classList.add("msg");
-
 
   if (data.sender === userId) {
     div.classList.add("sent");
@@ -140,15 +139,12 @@ db.on("child_added", snapshot => {
     div.classList.add("received");
   }
 
-
   div.innerText = data.text;
   messagesDiv.appendChild(div);
-
 
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 });
 </script>
-
 
 </body>
 </html>
