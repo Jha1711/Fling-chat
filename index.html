@@ -3,373 +3,155 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fling Chat</title>
+<title>VibeShare Nearby</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body {
+body{
   margin:0;
-  font-family:'Segoe UI', sans-serif;
-  color:white;
-}
-
-/* ===== DASHBOARD (NEW DESIGN) ===== */
-.dashboard {
-  height:100vh;
+  font-family:sans-serif;
+  background:linear-gradient(135deg,#0f172a,#1e293b);
+  color:#fff;
   display:flex;
   justify-content:center;
   align-items:center;
-  background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-}
-
-.card {
-  background: rgba(255,255,255,0.05);
-  backdrop-filter: blur(15px);
-  padding:40px;
-  border-radius:20px;
-  text-align:center;
-  width:300px;
-  box-shadow:0 10px 40px rgba(0,0,0,0.5);
-  animation: fadeIn 1s ease;
-}
-
-.card h1 { margin-bottom:10px; }
-.card p { color:#ccc; margin-bottom:20px; }
-
-.card input {
-  width:100%;
-  padding:12px;
-  border:none;
-  border-radius:25px;
-  background:#1e2a38;
-  color:white;
-  margin-bottom:20px;
-  text-align:center;
-}
-
-.card button {
-  width:100%;
-  padding:12px;
-  border:none;
-  border-radius:25px;
-  background: linear-gradient(45deg, #2aabee, #0088cc);
-  color:white;
-  font-size:16px;
-  cursor:pointer;
-  transition:0.3s;
-}
-
-.card button:hover {
-  transform:scale(1.05);
-}
-
-.features {
-  margin-top:15px;
-  font-size:12px;
-  color:#aaa;
-  display:flex;
-  justify-content:space-around;
-}
-
-@keyframes fadeIn {
-  from {opacity:0; transform:translateY(20px);}
-  to {opacity:1; transform:translateY(0);}
-}
-
-/* ===== CHAT UI ===== */
-#chatUI {
-  background:#0e1621;
   height:100vh;
-  display:flex;
-  flex-direction:column;
 }
 
-.header {
-  background:#17212b;
-  padding:10px;
-  display:flex;
-  gap:10px;
+.app{
+  width:350px;
+  text-align:center;
 }
 
-.header input {
-  flex:1;
-  padding:8px;
-  border-radius:20px;
-  border:none;
-  background:#242f3d;
-  color:white;
+h1{
+  margin-bottom:20px;
 }
 
-.chat-box {
-  flex:1;
-  overflow-y:auto;
+button{
+  width:100%;
   padding:15px;
-  display:flex;
-  flex-direction:column;
-}
-
-.msg {
-  max-width:65%;
-  padding:10px;
-  margin:5px 0;
-  border-radius:15px;
-}
-
-.sent {
-  background:#2b5278;
-  align-self:flex-end;
-}
-
-.received {
-  background:#182533;
-  align-self:flex-start;
-}
-
-.tick {
-  font-size:10px;
-  text-align:right;
-  opacity:0.7;
-}
-
-.input-box {
-  display:flex;
-  padding:10px;
-  background:#17212b;
-}
-
-.input-box input {
-  flex:1;
-  padding:10px;
-  border-radius:20px;
+  margin:10px 0;
   border:none;
-  background:#242f3d;
-  color:white;
+  border-radius:12px;
+  font-size:16px;
+  font-weight:bold;
+  cursor:pointer;
 }
 
-.input-box button {
-  margin-left:8px;
-  padding:10px;
-  border-radius:50%;
-  border:none;
-  background:#2aabee;
-  color:white;
-}
+.send{background:#00f2ff;color:#000;}
+.receive{background:#00ff88;color:#000;}
 
-.typing {
-  font-size:12px;
+#fileInput{display:none;}
+
+.status{
+  margin-top:15px;
+  font-size:14px;
   color:#aaa;
-  padding-left:15px;
 }
 </style>
 </head>
 
 <body>
 
-<!-- DASHBOARD -->
-<div id="dashboard" class="dashboard">
-  <div class="card">
-    <h1>💬 Fling Chat</h1>
-    <p>Connect anonymously. Chat instantly.</p>
+<div class="app">
 
-    <input id="username" placeholder="Enter your username">
-    <button onclick="createUser()">Start Chatting</button>
+<h1>⚡ VibeShare</h1>
 
-    <div class="features">
-      <span>✔ Real-time</span>
-      <span>✔ Nearby</span>
-      <span>✔ Anonymous</span>
-    </div>
-  </div>
-</div>
+<button class="send" onclick="startSend()">📤 Send</button>
+<input type="file" id="fileInput">
 
-<!-- CHAT UI -->
-<div id="chatUI" style="display:none;">
-  <div class="header">
-    <button onclick="goHome()">🏠</button>
-    <input id="searchUser" placeholder="Search user">
-    <button onclick="findNearby()">📍</button>
-  </div>
+<button class="receive" onclick="startReceive()">📥 Receive</button>
 
-  <div id="chatBox" class="chat-box"></div>
-  <div id="typingStatus" class="typing"></div>
+<div class="status" id="status">Ready</div>
 
-  <div class="input-box">
-    <input id="message" placeholder="Type message">
-    <button onclick="sendMessage()">➤</button>
-  </div>
 </div>
 
 <script>
-// FIREBASE
+// Firebase config
 const firebaseConfig = {
-  databaseURL: "https://fling-chat-95e81-default-rtdb.firebaseio.com/"
+  databaseURL: "https://vibetransfer-adbdf-default-rtdb.firebaseio.com/"
 };
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-let currentUser = "";
-let chatRoom = "global";
-let typingTimeout;
+let pc;
+let channel;
+let roomId = "room1"; // auto room (no code UI)
 
-// CREATE USER
-function createUser() {
-  currentUser = document.getElementById("username").value;
-  if (!currentUser) return alert("Enter username");
+// SEND
+function startSend(){
+  document.getElementById("fileInput").click();
 
-  navigator.geolocation.getCurrentPosition(pos => {
-    db.ref("users/" + currentUser).set({
-      name: currentUser,
-      lat: pos.coords.latitude,
-      lng: pos.coords.longitude
-    });
-  });
+  document.getElementById("fileInput").onchange = async (e)=>{
+    const file = e.target.files[0];
 
-  document.getElementById("dashboard").style.display = "none";
-  document.getElementById("chatUI").style.display = "flex";
+    pc = new RTCPeerConnection();
+    channel = pc.createDataChannel("file");
 
-  loadMessages();
-  listenTyping();
-}
+    channel.onopen = ()=>{
+      document.getElementById("status").innerText = "Sending...";
+      channel.send(file);
+    };
 
-// SEND MESSAGE
-function sendMessage() {
-  let msg = document.getElementById("message").value;
-  if (!msg) return;
-
-  let id = Date.now();
-
-  db.ref("chats/" + chatRoom + "/" + id).set({
-    sender: currentUser,
-    text: msg,
-    status: "sent"
-  });
-
-  document.getElementById("message").value = "";
-}
-
-// LOAD MESSAGES
-function loadMessages() {
-  db.ref("chats/" + chatRoom).on("value", snapshot => {
-    let data = snapshot.val();
-    if (!data) {
-      document.getElementById("chatBox").innerHTML = "";
-      return;
-    }
-
-    let html = "";
-
-    for (let id in data) {
-      let msg = data[id];
-      let type = msg.sender === currentUser ? "sent" : "received";
-
-      if (msg.sender !== currentUser && msg.status === "sent") {
-        db.ref("chats/" + chatRoom + "/" + id).update({
-          status: "delivered"
-        });
+    pc.onicecandidate = e=>{
+      if(e.candidate){
+        db.ref("rooms/"+roomId+"/sender").set(JSON.stringify(e.candidate));
       }
+    };
 
-      let tick = msg.sender === currentUser
-        ? (msg.status === "sent" ? "✔" : "✔✔")
-        : "";
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
 
-      html += `
-        <div class="msg ${type}">
-          ${msg.text}
-          <div class="tick">${tick}</div>
-        </div>
-      `;
-    }
+    db.ref("rooms/"+roomId+"/offer").set(JSON.stringify(offer));
 
-    let chatBox = document.getElementById("chatBox");
-    chatBox.innerHTML = html;
-    chatBox.scrollTop = chatBox.scrollHeight;
-  });
-}
-
-// SEARCH USER
-document.getElementById("searchUser").addEventListener("change", function() {
-  chatRoom = this.value;
-  loadMessages();
-  listenTyping();
-});
-
-// TYPING DETECT
-document.getElementById("message").addEventListener("input", () => {
-  db.ref("typing/" + chatRoom + "/" + currentUser).set(true);
-
-  clearTimeout(typingTimeout);
-  typingTimeout = setTimeout(() => {
-    db.ref("typing/" + chatRoom + "/" + currentUser).remove();
-  }, 1000);
-});
-
-// LISTEN TYPING
-function listenTyping() {
-  db.ref("typing/" + chatRoom).on("value", snap => {
-    let data = snap.val();
-    let typingDiv = document.getElementById("typingStatus");
-
-    if (!data) {
-      typingDiv.innerText = "";
-      return;
-    }
-
-    let usersTyping = Object.keys(data).filter(u => u !== currentUser);
-    typingDiv.innerText = usersTyping.length
-      ? usersTyping.join(", ") + " is typing..."
-      : "";
-  });
-}
-
-// NEARBY USERS
-function findNearby() {
-  navigator.geolocation.getCurrentPosition(pos => {
-    let lat1 = pos.coords.latitude;
-    let lon1 = pos.coords.longitude;
-
-    db.ref("users").once("value", snap => {
-      let users = snap.val();
-      let result = [];
-
-      for (let key in users) {
-        let u = users[key];
-        let d = getDistance(lat1, lon1, u.lat, u.lng);
-
-        if (d <= 50 && u.name !== currentUser) {
-          result.push(u.name);
-        }
+    db.ref("rooms/"+roomId+"/answer").on("value", async snap=>{
+      if(snap.exists()){
+        const ans = JSON.parse(snap.val());
+        await pc.setRemoteDescription(ans);
       }
-
-      alert("Nearby Users: " + result.join(", "));
     });
+  }
+}
+
+// RECEIVE
+function startReceive(){
+  pc = new RTCPeerConnection();
+
+  pc.ondatachannel = e=>{
+    channel = e.channel;
+
+    channel.onmessage = msg=>{
+      const blob = msg.data;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "received_file";
+      a.click();
+
+      document.getElementById("status").innerText = "File received!";
+    };
+  };
+
+  pc.onicecandidate = e=>{
+    if(e.candidate){
+      db.ref("rooms/"+roomId+"/receiver").set(JSON.stringify(e.candidate));
+    }
+  };
+
+  db.ref("rooms/"+roomId+"/offer").on("value", async snap=>{
+    if(snap.exists()){
+      const offer = JSON.parse(snap.val());
+      await pc.setRemoteDescription(offer);
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      db.ref("rooms/"+roomId+"/answer").set(JSON.stringify(answer));
+    }
   });
 }
-
-// DISTANCE
-function getDistance(lat1, lon1, lat2, lon2) {
-  let R = 6371;
-  let dLat = (lat2 - lat1) * Math.PI/180;
-  let dLon = (lon2 - lon1) * Math.PI/180;
-
-  let a = Math.sin(dLat/2)**2 +
-          Math.cos(lat1*Math.PI/180) *
-          Math.cos(lat2*Math.PI/180) *
-          Math.sin(dLon/2)**2;
-
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-}
-
-// HOME
-function goHome() {
-  location.reload();
-}
-
-// RESET CHAT
-window.onload = () => {
-  db.ref("chats").remove();
-};
 </script>
 
 </body>
