@@ -3,231 +3,258 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Anonymous Chat UI</title>
+<title>Anonymous Chat</title>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
-.app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
-.header {padding:15px;font-size:20px;font-weight:bold;}
-.search {padding:10px;}
-.search input {width:100%;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
-.chat-list {flex:1;overflow-y:auto;}
-.chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #111;cursor:pointer;}
-.avatar {width:40px;height:40px;border-radius:50%;background:pink;margin-right:10px;}
-.chat-info {flex:1;}
-.chat-name {font-weight:bold;}
-.chat-msg {font-size:12px;color:gray;}
-.time {font-size:12px;color:gray;}
-.chat-screen {display:none;flex-direction:column;height:100%;}
-.chat-header {padding:15px;border-bottom:1px solid #111;cursor:pointer;}
-.messages {flex:1;padding:10px;overflow-y:auto;}
-.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;}
-.sent {background:#d4f1a7;color:black;margin-left:auto;}
-.received {background:#334155;}
-.input-box {display:flex;padding:10px;border-top:1px solid #111;}
-.input-box input {flex:1;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
-.input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
+body {
+  margin:0;
+  font-family:Arial;
+  background:#0b141a;
+  color:white;
+}
+
+.header {
+  background:#202c33;
+  padding:12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+
+.header input {
+  width:60%;
+  padding:6px;
+  border-radius:6px;
+  border:none;
+}
+
+.chat-box {
+  height:75vh;
+  overflow-y:auto;
+  padding:10px;
+}
+
+.msg {
+  max-width:70%;
+  padding:8px;
+  margin:5px;
+  border-radius:8px;
+  position:relative;
+}
+
+.sent {
+  background:#005c4b;
+  margin-left:auto;
+}
+
+.received {
+  background:#202c33;
+}
+
+.tick {
+  font-size:10px;
+  position:absolute;
+  bottom:2px;
+  right:5px;
+}
+
+.input-box {
+  display:flex;
+  padding:10px;
+  background:#202c33;
+}
+
+.input-box input {
+  flex:1;
+  padding:8px;
+  border-radius:6px;
+  border:none;
+}
+
+.input-box button {
+  margin-left:5px;
+  padding:8px 12px;
+  background:#00a884;
+  border:none;
+  border-radius:6px;
+  color:white;
+}
+
+.dashboard {
+  text-align:center;
+  padding:20px;
+}
+button {
+  cursor:pointer;
+}
 </style>
 </head>
 
 <body>
 
-<div class="app">
-
-  <!-- Chat List -->
-  <div id="listScreen">
-    <div class="header">Nearby Users</div>
-    <div class="search"><input placeholder="Search" /></div>
-
-    <div class="chat-list"></div>
-  </div>
-
-  <!-- Chat Screen -->
-  <div id="chatScreen" class="chat-screen">
-    <div class="chat-header" onclick="back()">⬅ Back</div>
-    <div id="messages" class="messages"></div>
-
-    <div class="input-box">
-      <input id="msgInput" placeholder="Type message..." />
-      <button onclick="sendMessage()">Send</button>
-    </div>
-  </div>
-
+<div id="dashboard" class="dashboard">
+  <h2>Create Username</h2>
+  <input id="username" placeholder="Enter username"><br><br>
+  <button onclick="createUser()">Enter Chat</button>
 </div>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+<div id="chatUI" style="display:none;">
+  <div class="header">
+    <button onclick="goHome()">🏠</button>
+    <input id="searchUser" placeholder="Search user">
+    <button onclick="findNearby()">📍</button>
+  </div>
+
+  <div id="chatBox" class="chat-box"></div>
+
+  <div class="input-box">
+    <input id="message" placeholder="Type message">
+    <button onclick="sendMessage()">Send</button>
+  </div>
+</div>
 
 <script>
-// ===============================
-// FIREBASE CONFIG
-// ===============================
+// 🔥 Firebase Config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "fling-chat-95e81.firebaseapp.com",
-  databaseURL: "https://fling-chat-95e81-default-rtdb.firebaseio.com/",
-  projectId: "fling-chat-95e81",
+  databaseURL: "https://fling-chat-95e81-default-rtdb.firebaseio.com/"
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ===============================
-// USER SETUP
-// ===============================
-const userId = "user_" + Math.floor(Math.random() * 10000);
-const userName = "User" + Math.floor(Math.random() * 1000);
+// 🧠 VARIABLES
+let currentUser = "";
+let chatRoom = "global";
 
-// Save user location
-navigator.geolocation.getCurrentPosition(pos => {
-  db.ref("users/" + userId).set({
-    name: userName,
-    lat: pos.coords.latitude,
-    lng: pos.coords.longitude
+// 🚀 CREATE USER
+function createUser() {
+  currentUser = document.getElementById("username").value;
+  if (!currentUser) return alert("Enter username");
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    db.ref("users/" + currentUser).set({
+      name: currentUser,
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude
+    });
   });
-});
 
-// ===============================
-// DISTANCE FUNCTION
-// ===============================
-function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI/180;
-  const dLon = (lon2 - lon1) * Math.PI/180;
+  document.getElementById("dashboard").style.display = "none";
+  document.getElementById("chatUI").style.display = "block";
 
-  const a =
-    Math.sin(dLat/2)**2 +
-    Math.cos(lat1*Math.PI/180) *
-    Math.cos(lat2*Math.PI/180) *
-    Math.sin(dLon/2)**2;
-
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+  loadMessages();
 }
 
-// ===============================
-// SHOW NEARBY USERS
-// ===============================
-function loadNearbyUsers() {
-  db.ref("users").on("value", snap => {
-    const users = snap.val();
-    if (!users || !users[userId]) return;
-
-    const my = users[userId];
-    const list = document.querySelector(".chat-list");
-    list.innerHTML = "";
-
-    for (let id in users) {
-      if (id === userId) continue;
-
-      const u = users[id];
-      const dist = getDistance(my.lat, my.lng, u.lat, u.lng);
-
-      if (dist <= 50) {
-        const div = document.createElement("div");
-        div.className = "chat-item";
-
-        div.innerHTML = `
-          <div class="avatar"></div>
-          <div class="chat-info">
-            <div class="chat-name">${u.name}</div>
-            <div class="chat-msg">${dist.toFixed(1)} km away</div>
-          </div>
-          <div class="time">Nearby</div>
-        `;
-
-        div.onclick = () => startChat(id);
-        list.appendChild(div);
-      }
-    }
-  });
-}
-
-setTimeout(loadNearbyUsers, 2000);
-
-// ===============================
-// CHAT SYSTEM
-// ===============================
-let currentChat = null;
-
-function startChat(otherUserId) {
-  currentChat = "chat_" + userId + "_" + otherUserId;
-
-  document.getElementById("messages").innerHTML = "";
-  openChat();
-  listenMessages(currentChat);
-}
-
-// ===============================
-// SEND MESSAGE (✓)
-// ===============================
+// 💬 SEND MESSAGE
 function sendMessage() {
-  const input = document.getElementById("msgInput");
-  const text = input.value.trim();
-  if (!text || !currentChat) return;
+  let msg = document.getElementById("message").value;
+  if (!msg) return;
 
-  const ref = db.ref("chats/" + currentChat + "/messages").push();
+  let id = Date.now();
 
-  ref.set({
-    text,
-    sender: userId,
+  db.ref("chats/" + chatRoom + "/" + id).set({
+    sender: currentUser,
+    text: msg,
     status: "sent"
   });
 
-  input.value = "";
+  document.getElementById("message").value = "";
 }
 
-// ===============================
-// RECEIVE + ✓✓
-// ===============================
-const messagesDiv = document.getElementById("messages");
+// 📩 LOAD MESSAGES
+function loadMessages() {
+  db.ref("chats/" + chatRoom).on("value", snapshot => {
+    let data = snapshot.val();
+    let html = "";
 
-function listenMessages(chatId) {
-  db.ref("chats/" + chatId + "/messages").on("child_added", snap => {
-    const msg = snap.val();
-    const key = snap.key;
+    for (let id in data) {
+      let msg = data[id];
+      let type = msg.sender === currentUser ? "sent" : "received";
 
-    const div = document.createElement("div");
-    div.classList.add("msg");
+      // Update to delivered
+      if (msg.sender !== currentUser && msg.status === "sent") {
+        db.ref("chats/" + chatRoom + "/" + id).update({
+          status: "delivered"
+        });
+      }
 
-    let tick = msg.status === "delivered" ? "✓✓" : "✓";
+      let tick = "";
+      if (msg.sender === currentUser) {
+        tick = msg.status === "sent" ? "✔" : "✔✔";
+      }
 
-    if (msg.sender === userId) {
-      div.classList.add("sent");
-      div.innerText = msg.text + " " + tick;
-
-      div.onclick = () => {
-        if (confirm("Delete for everyone?")) {
-          db.ref("chats/" + chatId + "/messages/" + key).remove();
-          div.remove();
-        }
-      };
-
-    } else {
-      div.classList.add("received");
-      div.innerText = msg.text;
-
-      db.ref("chats/" + chatId + "/messages/" + key)
-        .update({ status: "delivered" });
+      html += `
+        <div class="msg ${type}">
+          ${msg.text}
+          <div class="tick">${tick}</div>
+        </div>
+      `;
     }
 
-    messagesDiv.appendChild(div);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    document.getElementById("chatBox").innerHTML = html;
+    document.getElementById("chatBox").scrollTop = 999999;
   });
 }
 
-// ===============================
-// UI NAVIGATION
-// ===============================
-function openChat() {
-  document.getElementById("listScreen").style.display = "none";
-  document.getElementById("chatScreen").style.display = "flex";
+// 🔍 SEARCH USER
+document.getElementById("searchUser").addEventListener("change", function() {
+  let user = this.value;
+  chatRoom = user;
+  loadMessages();
+});
+
+// 📍 FIND NEARBY USERS (50KM)
+function findNearby() {
+  navigator.geolocation.getCurrentPosition(pos => {
+    let lat1 = pos.coords.latitude;
+    let lon1 = pos.coords.longitude;
+
+    db.ref("users").once("value", snap => {
+      let users = snap.val();
+      let result = [];
+
+      for (let key in users) {
+        let u = users[key];
+        let d = getDistance(lat1, lon1, u.lat, u.lng);
+
+        if (d <= 50 && u.name !== currentUser) {
+          result.push(u.name);
+        }
+      }
+
+      alert("Nearby Users: " + result.join(", "));
+    });
+  });
 }
 
-function back() {
-  document.getElementById("listScreen").style.display = "block";
-  document.getElementById("chatScreen").style.display = "none";
+// 📏 DISTANCE CALCULATION
+function getDistance(lat1, lon1, lat2, lon2) {
+  let R = 6371;
+  let dLat = (lat2 - lat1) * Math.PI / 180;
+  let dLon = (lon2 - lon1) * Math.PI / 180;
+
+  let a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(lat1*Math.PI/180) *
+          Math.cos(lat2*Math.PI/180) *
+          Math.sin(dLon/2) *
+          Math.sin(dLon/2);
+
+  let c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
 }
+
+// 🏠 BACK HOME
+function goHome() {
+  location.reload();
+}
+
+// 🧹 DELETE CHAT ON REFRESH
+window.onload = () => {
+  db.ref("chats").remove();
+};
 </script>
 
 </body>
