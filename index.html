@@ -9,55 +9,89 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-body {margin:0;font-family:'Segoe UI', sans-serif;color:white;background:#0e1621;}
-.dashboard {height:100vh;display:flex;justify-content:center;align-items:center;background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);}
-.card {background:rgba(255,255,255,0.05);backdrop-filter:blur(15px);padding:40px;border-radius:20px;text-align:center;width:300px;}
-.card input {width:100%;padding:12px;border:none;border-radius:25px;background:#1e2a38;color:white;margin-bottom:20px;text-align:center;}
-.card button {width:100%;padding:12px;border:none;border-radius:25px;background:linear-gradient(45deg,#2aabee,#0088cc);color:white;}
+/* ✅ YOUR ORIGINAL UI — NO CHANGE */
+body { margin:0; font-family:'Segoe UI', sans-serif; color:white; }
+.dashboard { height:100vh; display:flex; justify-content:center; align-items:center; background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); }
+.card { background: rgba(255,255,255,0.05); backdrop-filter: blur(15px); padding:40px; border-radius:20px; text-align:center; width:300px; box-shadow:0 10px 40px rgba(0,0,0,0.5); animation: fadeIn 1s ease; }
+.card h1 { margin-bottom:10px; }
+.card p { color:#ccc; margin-bottom:20px; }
+.card input { width:100%; padding:12px; border:none; border-radius:25px; background:#1e2a38; color:white; margin-bottom:20px; text-align:center; }
+.card button { width:100%; padding:12px; border:none; border-radius:25px; background: linear-gradient(45deg, #2aabee, #0088cc); color:white; font-size:16px; cursor:pointer; transition:0.3s; }
+.card button:hover { transform:scale(1.05); }
+.features { margin-top:15px; font-size:12px; color:#aaa; display:flex; justify-content:space-around; }
 
-#chatUI {display:none;height:100vh;flex-direction:column;}
-.header {background:#17212b;padding:10px;display:flex;gap:10px;}
-.header input {flex:1;padding:8px;border-radius:20px;border:none;background:#242f3d;color:white;}
+.chat-animation { position: relative; height: 120px; margin-top: 20px; }
+.person { position: absolute; font-size: 28px; animation: float 3s infinite ease-in-out; }
+.boy1 { left: 10%; bottom: 0; }
+.girl1 { left: 30%; bottom: 0; }
+.boy2 { right: 30%; bottom: 0; }
+.girl2 { right: 10%; bottom: 0; }
 
-#nearbyList {padding:10px;border-bottom:1px solid #222;max-height:120px;overflow-y:auto;}
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
-.user {padding:8px;background:#1e2a38;margin:5px;border-radius:10px;cursor:pointer;}
-.user:hover {background:#2b5278;}
+.bubble { position: absolute; background: rgba(255,255,255,0.1); padding: 6px 10px; border-radius: 10px; font-size: 12px; opacity: 0; animation: talk 6s infinite; }
+.b1 { left: 10%; bottom: 50px; animation-delay: 0s; }
+.b2 { left: 30%; bottom: 60px; animation-delay: 1.5s; }
+.b3 { right: 30%; bottom: 60px; animation-delay: 3s; }
+.b4 { right: 10%; bottom: 50px; animation-delay: 4.5s; }
 
-.chat-box {flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;}
-.msg {max-width:65%;padding:10px;margin:5px 0;border-radius:15px;}
-.sent {background:#2b5278;align-self:flex-end;}
-.received {background:#182533;align-self:flex-start;}
-.tick {font-size:10px;text-align:right;}
+@keyframes talk { 0% { opacity: 0; transform: translateY(10px); } 10%, 30% { opacity: 1; transform: translateY(0); } 40% { opacity: 0; } 100% { opacity: 0; } }
+@keyframes fadeIn { from {opacity:0; transform:translateY(20px);} to {opacity:1; transform:translateY(0);} }
 
-.input-box {display:flex;padding:10px;background:#17212b;}
-.input-box input {flex:1;padding:10px;border-radius:20px;border:none;background:#242f3d;color:white;}
-.input-box button {margin-left:8px;padding:10px;border-radius:50%;border:none;background:#2aabee;color:white;}
+#chatUI { background:#0e1621; height:100vh; display:flex; flex-direction:column; }
+.header { background:#17212b; padding:10px; display:flex; gap:10px; }
+.header input { flex:1; padding:8px; border-radius:20px; border:none; background:#242f3d; color:white; }
 
-.typing {font-size:12px;color:#aaa;padding-left:15px;}
+.chat-box { flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; }
+
+.msg { max-width:65%; padding:10px; margin:5px 0; border-radius:15px; }
+.sent { background:#2b5278; align-self:flex-end; }
+.received { background:#182533; align-self:flex-start; }
+
+.tick { font-size:10px; text-align:right; opacity:0.7; }
+
+.input-box { display:flex; padding:10px; background:#17212b; }
+.input-box input { flex:1; padding:10px; border-radius:20px; border:none; background:#242f3d; color:white; }
+.input-box button { margin-left:8px; padding:10px; border-radius:50%; border:none; background:#2aabee; color:white; }
+
+.typing { font-size:12px; color:#aaa; padding-left:15px; }
 </style>
 </head>
 
 <body>
 
-<!-- DASHBOARD -->
 <div id="dashboard" class="dashboard">
   <div class="card">
     <h1>💬 Fling Chat</h1>
-    <input id="username" placeholder="Enter username">
-    <button onclick="createUser()">Start</button>
+    <p>Connect anonymously. Chat instantly.</p>
+    <input id="username" placeholder="Enter your username">
+    <button onclick="createUser()">Start Chatting</button>
+
+    <div class="features">
+      <span>✔ Real-time</span>
+      <span>✔ Nearby</span>
+      <span>✔ Anonymous</span>
+    </div>
+
+    <div class="chat-animation">
+      <div class="person boy1">👦</div>
+      <div class="person girl1">👧</div>
+      <div class="person boy2">🧑</div>
+      <div class="person girl2">👩</div>
+      <div class="bubble b1">Hey!</div>
+      <div class="bubble b2">Hi 😊</div>
+      <div class="bubble b3">What's up?</div>
+      <div class="bubble b4">Let's chat!</div>
+    </div>
   </div>
 </div>
 
-<!-- CHAT -->
-<div id="chatUI">
+<div id="chatUI" style="display:none;">
   <div class="header">
     <button onclick="goHome()">🏠</button>
-    <input placeholder="Nearby users auto shown">
+    <input id="searchUser" placeholder="Search user">
     <button onclick="findNearby()">📍</button>
   </div>
-
-  <div id="nearbyList"></div>
 
   <div id="chatBox" class="chat-box"></div>
   <div id="typingStatus" class="typing"></div>
@@ -89,8 +123,7 @@ function createUser() {
     db.ref("users/" + currentUser).set({
       name: currentUser,
       lat: pos.coords.latitude,
-      lng: pos.coords.longitude,
-      online: true
+      lng: pos.coords.longitude
     });
 
     db.ref("users/" + currentUser).onDisconnect().remove();
@@ -102,10 +135,9 @@ function createUser() {
   findNearby();
 }
 
-// START CHAT
-function startChat(otherUser) {
-  chatRoom = [currentUser, otherUser].sort().join("_");
-  document.getElementById("chatBox").innerHTML = "";
+// START PRIVATE CHAT
+function startChat(user) {
+  chatRoom = [currentUser, user].sort().join("_");
   loadMessages();
   listenTyping();
 }
@@ -143,18 +175,9 @@ function loadMessages() {
       let msg = data[id];
       let type = msg.sender === currentUser ? "sent" : "received";
 
-      if (msg.sender !== currentUser && msg.status === "sent") {
-        db.ref("chats/" + chatRoom + "/" + id).update({status:"delivered"});
-      }
-
-      let tick = msg.sender === currentUser
-        ? (msg.status === "sent" ? "✔" : "✔✔")
-        : "";
-
       html += `
         <div class="msg ${type}">
           ${msg.text}
-          <div class="tick">${tick}</div>
         </div>
       `;
     }
@@ -165,39 +188,12 @@ function loadMessages() {
   });
 }
 
-// TYPING
-document.getElementById("message").addEventListener("input", () => {
-  if (!chatRoom) return;
-
-  db.ref("typing/" + chatRoom + "/" + currentUser).set(true);
-
-  clearTimeout(typingTimeout);
-  typingTimeout = setTimeout(() => {
-    db.ref("typing/" + chatRoom + "/" + currentUser).remove();
-  }, 1000);
+// SEARCH → PRIVATE CHAT
+document.getElementById("searchUser").addEventListener("change", function() {
+  startChat(this.value);
 });
 
-// LISTEN TYPING
-function listenTyping() {
-  db.ref("typing/" + chatRoom).off();
-
-  db.ref("typing/" + chatRoom).on("value", snap => {
-    let data = snap.val();
-    let typingDiv = document.getElementById("typingStatus");
-
-    if (!data) {
-      typingDiv.innerText = "";
-      return;
-    }
-
-    let usersTyping = Object.keys(data).filter(u => u !== currentUser);
-    typingDiv.innerText = usersTyping.length
-      ? usersTyping.join(", ") + " is typing..."
-      : "";
-  });
-}
-
-// NEARBY USERS UI
+// NEARBY USERS (SHOW IN CHAT BOX)
 function findNearby() {
   navigator.geolocation.getCurrentPosition(pos => {
     let lat1 = pos.coords.latitude;
@@ -213,15 +209,15 @@ function findNearby() {
 
         if (d <= 50 && u.name !== currentUser) {
           html += `
-            <div class="user" onclick="startChat('${u.name}')">
+            <div style="padding:10px;background:#1e2a38;margin:5px;border-radius:10px;cursor:pointer"
+                 onclick="startChat('${u.name}')">
               🟢 ${u.name}
             </div>
           `;
         }
       }
 
-      document.getElementById("nearbyList").innerHTML =
-        html || "No nearby users";
+      document.getElementById("chatBox").innerHTML = html || "No nearby users";
     });
   });
 }
