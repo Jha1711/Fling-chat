@@ -1,6 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anonymous Chat UI</title>
+
+<style>
+body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
+.app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
+.header {padding:15px;font-size:20px;font-weight:bold;}
+.search {padding:10px;}
+.search input {width:100%;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
+.chat-list {flex:1;overflow-y:auto;}
+.chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #111;cursor:pointer;}
+.avatar {width:40px;height:40px;border-radius:50%;background:pink;margin-right:10px;}
+.chat-info {flex:1;}
+.chat-name {font-weight:bold;}
+.chat-msg {font-size:12px;color:gray;}
+.time {font-size:12px;color:gray;}
+.chat-screen {display:none;flex-direction:column;height:100%;}
+.chat-header {padding:15px;border-bottom:1px solid #111;cursor:pointer;}
+.messages {flex:1;padding:10px;overflow-y:auto;}
+.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;}
+.sent {background:#d4f1a7;color:black;margin-left:auto;}
+.received {background:#334155;}
+.input-box {display:flex;padding:10px;border-top:1px solid #111;}
+.input-box input {flex:1;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
+.input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+  <!-- Chat List -->
+  <div id="listScreen">
+    <div class="header">Nearby Users</div>
+    <div class="search"><input placeholder="Search" /></div>
+
+    <div class="chat-list"></div>
+  </div>
+
+  <!-- Chat Screen -->
+  <div id="chatScreen" class="chat-screen">
+    <div class="chat-header" onclick="back()">⬅ Back</div>
+    <div id="messages" class="messages"></div>
+
+    <div class="input-box">
+      <input id="msgInput" placeholder="Type message..." />
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
 <script>
 // ===============================
-// FIREBASE SETUP
+// FIREBASE CONFIG
 // ===============================
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
@@ -18,7 +79,7 @@ const db = firebase.database();
 const userId = "user_" + Math.floor(Math.random() * 10000);
 const userName = "User" + Math.floor(Math.random() * 1000);
 
-// Save user with location
+// Save user location
 navigator.geolocation.getCurrentPosition(pos => {
   db.ref("users/" + userId).set({
     name: userName,
@@ -28,7 +89,7 @@ navigator.geolocation.getCurrentPosition(pos => {
 });
 
 // ===============================
-// DISTANCE (50KM FILTER)
+// DISTANCE FUNCTION
 // ===============================
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -36,24 +97,23 @@ function getDistance(lat1, lon1, lat2, lon2) {
   const dLon = (lon2 - lon1) * Math.PI/180;
 
   const a =
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.sin(dLat/2)**2 +
     Math.cos(lat1*Math.PI/180) *
     Math.cos(lat2*Math.PI/180) *
-    Math.sin(dLon/2) *
-    Math.sin(dLon/2);
+    Math.sin(dLon/2)**2;
 
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
 }
 
 // ===============================
-// FIND NEARBY USERS (SHOW IN UI)
+// SHOW NEARBY USERS
 // ===============================
-function findNearbyUsers() {
-  db.ref("users").once("value", snap => {
+function loadNearbyUsers() {
+  db.ref("users").on("value", snap => {
     const users = snap.val();
-    if (!users[userId]) return;
+    if (!users || !users[userId]) return;
 
-    const myData = users[userId];
+    const my = users[userId];
     const list = document.querySelector(".chat-list");
     list.innerHTML = "";
 
@@ -61,11 +121,12 @@ function findNearbyUsers() {
       if (id === userId) continue;
 
       const u = users[id];
-      const dist = getDistance(myData.lat, myData.lng, u.lat, u.lng);
+      const dist = getDistance(my.lat, my.lng, u.lat, u.lng);
 
       if (dist <= 50) {
         const div = document.createElement("div");
         div.className = "chat-item";
+
         div.innerHTML = `
           <div class="avatar"></div>
           <div class="chat-info">
@@ -82,8 +143,7 @@ function findNearbyUsers() {
   });
 }
 
-// Auto load nearby users
-setTimeout(findNearbyUsers, 2000);
+setTimeout(loadNearbyUsers, 2000);
 
 // ===============================
 // CHAT SYSTEM
@@ -91,16 +151,11 @@ setTimeout(findNearbyUsers, 2000);
 let currentChat = null;
 
 function startChat(otherUserId) {
-  const chatId = "chat_" + Date.now();
+  currentChat = "chat_" + userId + "_" + otherUserId;
 
-  db.ref("userChats/" + userId + "/" + chatId).set(true);
-  db.ref("userChats/" + otherUserId + "/" + chatId).set(true);
-
-  currentChat = chatId;
-
-  document.getElementById("messages").innerHTML = ""; // no old chat
+  document.getElementById("messages").innerHTML = "";
   openChat();
-  listenMessages(chatId);
+  listenMessages(currentChat);
 }
 
 // ===============================
@@ -111,72 +166,58 @@ function sendMessage() {
   const text = input.value.trim();
   if (!text || !currentChat) return;
 
-  const msgId = db.ref("chats/" + currentChat + "/messages").push().key;
+  const ref = db.ref("chats/" + currentChat + "/messages").push();
 
-  db.ref("chats/" + currentChat + "/messages/" + msgId).set({
+  ref.set({
     text,
     sender: userId,
-    status: "sent",
-    time: Date.now()
+    status: "sent"
   });
 
   input.value = "";
 }
 
 // ===============================
-// RECEIVE + DOUBLE TICK (✓✓)
+// RECEIVE + ✓✓
 // ===============================
 const messagesDiv = document.getElementById("messages");
 
 function listenMessages(chatId) {
-  db.ref("chats/" + chatId + "/messages")
-    .limitToLast(50)
-    .on("child_added", snap => {
+  db.ref("chats/" + chatId + "/messages").on("child_added", snap => {
+    const msg = snap.val();
+    const key = snap.key;
 
-      const msg = snap.val();
-      const msgKey = snap.key;
+    const div = document.createElement("div");
+    div.classList.add("msg");
 
-      const div = document.createElement("div");
-      div.classList.add("msg");
+    let tick = msg.status === "delivered" ? "✓✓" : "✓";
 
-      let tick = "✓";
-      if (msg.status === "delivered") tick = "✓✓";
+    if (msg.sender === userId) {
+      div.classList.add("sent");
+      div.innerText = msg.text + " " + tick;
 
-      if (msg.sender === userId) {
-        div.classList.add("sent");
-        div.innerText = msg.text + " " + tick;
+      div.onclick = () => {
+        if (confirm("Delete for everyone?")) {
+          db.ref("chats/" + chatId + "/messages/" + key).remove();
+          div.remove();
+        }
+      };
 
-        // DELETE OPTION (long press simulation)
-        div.onclick = () => {
-          if (confirm("Delete for everyone?")) {
-            deleteMessage(chatId, msgKey);
-            div.remove();
-          }
-        };
+    } else {
+      div.classList.add("received");
+      div.innerText = msg.text;
 
-      } else {
-        div.classList.add("received");
-        div.innerText = msg.text;
+      db.ref("chats/" + chatId + "/messages/" + key)
+        .update({ status: "delivered" });
+    }
 
-        // mark delivered
-        db.ref("chats/" + chatId + "/messages/" + msgKey)
-          .update({ status: "delivered" });
-      }
-
-      messagesDiv.appendChild(div);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    });
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  });
 }
 
 // ===============================
-// DELETE FOR EVERYONE
-// ===============================
-function deleteMessage(chatId, msgId) {
-  db.ref("chats/" + chatId + "/messages/" + msgId).remove();
-}
-
-// ===============================
-// UI NAVIGATION (UNCHANGED)
+// UI NAVIGATION
 // ===============================
 function openChat() {
   document.getElementById("listScreen").style.display = "none";
@@ -188,3 +229,6 @@ function back() {
   document.getElementById("chatScreen").style.display = "none";
 }
 </script>
+
+</body>
+</html>
