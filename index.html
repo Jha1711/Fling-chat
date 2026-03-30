@@ -3,209 +3,152 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Anonymous Multi-Chat Rooms</title>
+<title>Anonymous Chat UI</title>
+
 
 <style>
 body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
 .app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
-.header {padding:15px;font-size:20px;font-weight:bold;background:#111;display:flex;justify-content:space-between;align-items:center;}
-.header button {background:none;border:none;color:white;font-size:18px;cursor:pointer;}
-.username-screen {display:flex;flex-direction:column;flex:1;justify-content:center;align-items:center;}
-.username-screen input {padding:10px;width:80%;border-radius:10px;border:none;margin-bottom:10px;}
-.username-screen button {padding:10px 20px;border:none;border-radius:10px;background:#22c55e;color:black;font-weight:bold;cursor:pointer;}
+.header {padding:15px;font-size:20px;font-weight:bold;}
+.search {padding:10px;}
+.search input {width:100%;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
+.chat-list {flex:1;overflow-y:auto;}
+.chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #111;cursor:pointer;}
+.avatar {width:40px;height:40px;border-radius:50%;background:pink;margin-right:10px;}
+.chat-info {flex:1;}
+.chat-name {font-weight:bold;}
+.chat-msg {font-size:12px;color:gray;}
+.time {font-size:12px;color:gray;}
 .chat-screen {display:none;flex-direction:column;height:100%;}
-.messages {flex:1;padding:10px;overflow-y:auto;background:#121212;}
-.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;word-wrap:break-word;position:relative;}
-.sent {background:#22c55e;color:black;margin-left:auto;}
-.received {background:#444;color:white;margin-right:auto;}
-.msg-username {font-size:10px;color:gray;margin-bottom:2px;}
-.tick {font-size:10px;color:gray;margin-left:5px;}
-.input-box {display:flex;padding:10px;border-top:1px solid #333;}
+.chat-header {padding:15px;border-bottom:1px solid #111;cursor:pointer;}
+.messages {flex:1;padding:10px;overflow-y:auto;}
+.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;}
+.sent {background:#d4f1a7;color:black;margin-left:auto;}
+.received {background:#334155;}
+.input-box {display:flex;padding:10px;border-top:1px solid #111;}
 .input-box input {flex:1;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
 .input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
-.search-btn {padding:5px 8px;border:none;border-radius:5px;background:#3b82f6;color:white;cursor:pointer;}
-.user-list {background:#222;padding:5px;border-radius:10px;margin-bottom:10px;}
-.user-item {padding:5px 10px;border-bottom:1px solid #333;cursor:pointer;}
-.user-item:last-child {border-bottom:none;}
 </style>
 </head>
 <body>
 
+
 <div class="app">
 
-  <!-- Username Entry -->
-  <div id="usernameScreen" class="username-screen">
-    <input id="usernameInput" placeholder="Enter your name..." />
-    <button onclick="enterChat()">Join Chat</button>
+
+  <!-- Chat List -->
+  <div id="listScreen">
+    <div class="header">Chats</div>
+    <div class="search"><input placeholder="Search" /></div>
+
+
+    <div class="chat-list">
+      <div class="chat-item" onclick="openChat()">
+        <div class="avatar"></div>
+        <div class="chat-info">
+          <div class="chat-name">Anonymous Room</div>
+          <div class="chat-msg">Tap to chat</div>
+        </div>
+        <div class="time">Live</div>
+      </div>
+    </div>
   </div>
+
 
   <!-- Chat Screen -->
   <div id="chatScreen" class="chat-screen">
-    <div class="header">
-      <button onclick="goHome()">← Home</button>
-      <span id="roomHeader">Chat</span>
-      <button class="search-btn" onclick="searchNearby()">🔍 Nearby</button>
-    </div>
-
-    <div id="userList" class="user-list" style="display:none;"></div>
+    <div class="chat-header" onclick="back()">⬅ Back</div>
     <div id="messages" class="messages"></div>
 
+
     <div class="input-box">
-      <input id="msgInput" placeholder="Type a message..." />
+      <input id="msgInput" placeholder="Type message..." />
       <button onclick="sendMessage()">Send</button>
     </div>
   </div>
 
+
 </div>
+
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
+
 <script>
+// 🔴 PASTE YOUR FIREBASE CONFIG HERE
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "fling-chat-95e81.firebaseapp.com",
   databaseURL: "https://fling-chat-95e81-default-rtdb.firebaseio.com/",
   projectId: "fling-chat-95e81",
 };
+
+
 firebase.initializeApp(firebaseConfig);
+const db = firebase.database().ref("chatroom");
 
-let username = "", userId = "", userLat = 0, userLng = 0;
-let sessionMessages = []; // store messages for current session only
-let db, onlineRef, messagesDiv = document.getElementById("messages"), userListDiv = document.getElementById("userList");
 
-// --- Enter Chat ---
-function enterChat() {
-  username = document.getElementById("usernameInput").value.trim();
-  if(!username) { alert("Enter a name"); return; }
+// Random user ID
+const userId = "user_" + Math.floor(Math.random() * 10000);
 
-  userId = "user_" + Math.floor(Math.random()*100000);
-  db = firebase.database().ref("chatrooms/newusers");
-  onlineRef = firebase.database().ref("chatrooms/online");
 
-  // Get user location from browser
-  if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(pos=>{
-      userLat = pos.coords.latitude;
-      userLng = pos.coords.longitude;
-
-      // Set user online with location
-      onlineRef.child(userId).set({username, lat:userLat, lng:userLng});
-      onlineRef.child(userId).onDisconnect().remove();
-
-      document.getElementById("usernameScreen").style.display = "none";
-      document.getElementById("chatScreen").style.display = "flex";
-
-      // Clear old session messages
-      messagesDiv.innerHTML = "";
-      sessionMessages = [];
-      userListDiv.style.display = "none";
-
-    }, err=>{
-      alert("Geolocation is required to find nearby users.");
-    });
-  } else {
-    alert("Geolocation is not supported in your browser.");
-  }
+function openChat() {
+  document.getElementById("listScreen").style.display = "none";
+  document.getElementById("chatScreen").style.display = "flex";
 }
 
-// --- Back to Home ---
-function goHome() {
+
+function back() {
+  document.getElementById("listScreen").style.display = "block";
   document.getElementById("chatScreen").style.display = "none";
-  document.getElementById("usernameScreen").style.display = "flex";
-  messagesDiv.innerHTML = "";
-  userListDiv.innerHTML = "";
-  userListDiv.style.display = "none";
-  sessionMessages = [];
 }
 
-// --- Send Message ---
+
 function sendMessage() {
   const input = document.getElementById("msgInput");
   const text = input.value.trim();
-  if(!text) return;
+  if (!text) return;
 
-  const timestamp = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-  const msgObj = {text, sender:userId, username, time:timestamp};
 
-  // Add to session messages only
-  sessionMessages.push(msgObj);
-  renderMessage(msgObj);
+  db.push({
+    text: text,
+    sender: userId
+  });
+
+
   input.value = "";
 }
 
-// --- Render Message ---
-function renderMessage(data){
+
+// Receive messages
+const messagesDiv = document.getElementById("messages");
+
+
+db.on("child_added", snapshot => {
+  const data = snapshot.val();
+
+
   const div = document.createElement("div");
   div.classList.add("msg");
 
-  const nameDiv = document.createElement("div");
-  nameDiv.classList.add("msg-username");
-  nameDiv.innerText = data.sender===userId ? "You" : data.username;
-  div.appendChild(nameDiv);
 
-  const textDiv = document.createElement("div");
-  textDiv.innerText = data.text + " (" + data.time + ")";
-  div.appendChild(textDiv);
-
-  div.classList.add(data.sender===userId?"sent":"received");
-  messagesDiv.appendChild(div);
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
-
-// --- Nearby Users Search ---
-function searchNearby() {
-  if(!navigator.geolocation){
-    alert("Geolocation not supported");
-    return;
+  if (data.sender === userId) {
+    div.classList.add("sent");
+  } else {
+    div.classList.add("received");
   }
-  navigator.geolocation.getCurrentPosition(pos=>{
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
 
-    onlineRef.once("value").then(snap => {
-      const users = snap.val();
-      userListDiv.innerHTML = "";
-      let hasNearby = false;
-      for(let id in users){
-        if(id===userId) continue;
-        const dist = getDistance(lat,lng,users[id].lat,users[id].lng);
-        if(dist<=100){
-          hasNearby = true;
-          const div = document.createElement("div");
-          div.classList.add("user-item");
-          div.innerText = users[id].username;
-          div.onclick = () => startPrivateChat(users[id].username);
-          userListDiv.appendChild(div);
-        }
-      }
-      userListDiv.style.display = hasNearby ? "block" : "none";
-      if(!hasNearby) alert("No nearby users within 100 km");
-    });
-  }, err=>{
-    alert("Cannot access location");
-  });
-}
 
-// --- Start Private Chat Placeholder ---
-function startPrivateChat(name){
-  // For now, clear old messages and start new session
-  messagesDiv.innerHTML = "";
-  sessionMessages = [];
-  alert("Starting new conversation with " + name);
-}
+  div.innerText = data.text;
+  messagesDiv.appendChild(div);
 
-// --- Haversine formula ---
-function getDistance(lat1, lon1, lat2, lon2){
-  const R = 6371;
-  const dLat = (lat2-lat1)*Math.PI/180;
-  const dLon = (lon2-lon1)*Math.PI/180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R*c;
-}
+
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+});
 </script>
+
 
 </body>
 </html>
