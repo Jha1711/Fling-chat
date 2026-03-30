@@ -55,6 +55,9 @@ body { margin:0; font-family:'Segoe UI', sans-serif; color:white; }
 .input-box button { margin-left:8px; padding:10px; border-radius:50%; border:none; background:#2aabee; color:white; }
 
 .typing { font-size:12px; color:#aaa; padding-left:15px; }
+
+.online-indicator { display: inline-block; width: 8px; height: 8px; background: #4ade80; border-radius: 50%; margin-right: 5px; }
+.offline-indicator { background: #6b7280; }
 </style>
 </head>
 
@@ -113,38 +116,82 @@ const db = firebase.database();
 let currentUser = "";
 let chatRoom = "";
 let typingTimeout;
+let usersRef;
 
 // CREATE USER
 function createUser() {
-  currentUser = document.getElementById("username").value;
+  currentUser = document.getElementById("username").value.trim();
   if (!currentUser) return alert("Enter username");
 
   navigator.geolocation.getCurrentPosition(pos => {
-    db.ref("users/" + currentUser).set({
+    // Set user data with online status
+    const userData = {
       name: currentUser,
       lat: pos.coords.latitude,
-      lng: pos.coords.longitude
-    });
+      lng: pos.coords.longitude,
+      online: true,
+      lastSeen: firebase.database.ServerValue.TIMESTAMP
+    };
+    
+    db.ref("activeUsers/" + currentUser).set(userData);
+    db.ref("activeUsers/" + currentUser).onDisconnect().remove();
 
-    db.ref("users/" + currentUser).onDisconnect().remove();
+    document.getElementById("dashboard").style.display = "none";
+    document.getElementById("chatUI").style.display = "flex";
+
+    findNearby();
+    showActiveUsers();
+  }, () => {
+    alert("Location access required");
   });
+}
 
-  document.getElementById("dashboard").style.display = "none";
-  document.getElementById("chatUI").style.display = "flex";
+// SHOW ONLY CURRENTLY ACTIVE USERS
+function showActiveUsers() {
+  usersRef = db.ref("activeUsers");
+  usersRef.on("value", snapshot => {
+    let users = snapshot.val();
+    let html = "<h3 style='margin:15px 0 10px 0; color:#aaa;'>Active Users</h3>";
 
-  findNearby();
+    if (!users || Object.keys(users).length === 0) {
+      html += "<div style='padding:20px; color:#666; text-align:center;'>No active users</div>";
+    } else {
+      for (let key in users) {
+        if (key !== currentUser) {
+          let u = users[key];
+          html += `
+            <div style="padding:15px;background:#1e2a38;margin:5px;border-radius:15px;cursor:pointer; display:flex; align-items:center; transition:0.3s"
+                 onclick="startChat('${key}')"
+                 onmouseover="this.style.background='#2b5278'"
+                 onmouseout="this.style.background='#1e2a38'">
+              <span class="online-indicator"></span>
+              ${key} 
+              <span style="margin-left:auto; font-size:12px; opacity:0.7;">${Math.round(getDistance(u.lat, u.lng))}km</span>
+            </div>
+          `;
+        }
+      }
+    }
+
+    document.getElementById("chatBox").innerHTML = html;
+  });
 }
 
 // START PRIVATE CHAT
 function startChat(user) {
   chatRoom = [currentUser, user].sort().join("_");
+  document.getElementById("chatBox").innerHTML = `
+    <div style="text-align:center; padding:20px; color:#aaa;">
+      <h3>Chatting with ${user}</h3>
+      <button onclick="showActiveUsers()" style="background:#2aabee; border:none; padding:8px 16px; border-radius:20px; color:white; cursor:pointer;">← Back to users</button>
+    </div>
+  `;
   loadMessages();
-  listenTyping();
 }
 
 // SEND MESSAGE
 function sendMessage() {
-  let msg = document.getElementById("message").value;
+  let msg = document.getElementById("message").value.trim();
   if (!msg || !chatRoom) return;
 
   let id = Date.now();
@@ -152,7 +199,8 @@ function sendMessage() {
   db.ref("chats/" + chatRoom + "/" + id).set({
     sender: currentUser,
     text: msg,
-    status: "sent"
+    status: "sent",
+    timestamp: firebase.database.ServerValue.TIMESTAMP
   });
 
   document.getElementById("message").value = "";
@@ -162,85 +210,120 @@ function sendMessage() {
 function loadMessages() {
   db.ref("chats/" + chatRoom).off();
 
-  db.ref("chats/" + chatRoom).on("value", snapshot => {
+  db.ref("chats/" + chatRoom).orderByChild("timestamp").on("value", snapshot => {
     let data = snapshot.val();
     let html = "";
 
     if (!data) {
-      document.getElementById("chatBox").innerHTML = "Start chatting...";
-      return;
-    }
+      html = "<div style='text-align:center; padding:30px; color:#666;'>No messages yet. Say hi! 👋</div>";
+    } else {
+      for (let id in data) {
+        let msg = data[id];
+        let type = msg.sender === currentUser ? "sent" : "received";
 
-    for (let id in data) {
-      let msg = data[id];
-      let type = msg.sender === currentUser ? "sent" : "received";
-
-      html += `
-        <div class="msg ${type}">
-          ${msg.text}
-        </div>
-      `;
+        html += `
+          <div class="msg ${type}">
+            ${msg.text}
+          </div>
+        `;
+      }
     }
 
     let chatBox = document.getElementById("chatBox");
-    chatBox.innerHTML = html;
+    chatBox.innerHTML = `
+      <div style="text-align:center; padding:20px; color:#aaa;">
+        <h3>Chatting with ${chatRoom.split("_")[0] === currentUser ? chatRoom.split("_")[1] : chatRoom.split("_")[0]}</h3>
+        <button onclick="showActiveUsers()" style="background:#2aabee; border:none; padding:8px 16px; border-radius:20px; color:white; cursor:pointer;">← Back to users</button>
+      </div>
+      ${html}
+    `;
     chatBox.scrollTop = chatBox.scrollHeight;
   });
 }
 
 // SEARCH → PRIVATE CHAT
-document.getElementById("searchUser").addEventListener("change", function() {
-  startChat(this.value);
+document.getElementById("searchUser").addEventListener("keypress", function(e) {
+  if (e.key === "Enter") {
+    let searchTerm = this.value.trim();
+    if (searchTerm) {
+      db.ref("activeUsers").once("value").then(snapshot => {
+        let users = snapshot.val();
+        let found = false;
+        for (let key in users) {
+          if (key.toLowerCase().includes(searchTerm.toLowerCase()) && key !== currentUser) {
+            startChat(key);
+            found = true;
+            break;
+          }
+        }
+        if (!found) alert("User not found or offline");
+      });
+    }
+  }
 });
 
-// NEARBY USERS (SHOW IN CHAT BOX)
+// NEARBY USERS
 function findNearby() {
   navigator.geolocation.getCurrentPosition(pos => {
     let lat1 = pos.coords.latitude;
     let lon1 = pos.coords.longitude;
 
-    db.ref("users").on("value", snap => {
-      let users = snap.val();
-      let html = "";
-
+    db.ref("activeUsers").once("value").then(snapshot => {
+      let users = snapshot.val();
+      let nearbyUsers = [];
+      
       for (let key in users) {
-        let u = users[key];
-        let d = getDistance(lat1, lon1, u.lat, u.lng);
-
-        if (d <= 50 && u.name !== currentUser) {
-          html += `
-            <div style="padding:10px;background:#1e2a38;margin:5px;border-radius:10px;cursor:pointer"
-                 onclick="startChat('${u.name}')">
-              🟢 ${u.name}
-            </div>
-          `;
+        if (key !== currentUser) {
+          let u = users[key];
+          let distance = getDistance(lat1, lon1, u.lat, u.lng);
+          if (distance <= 50) {
+            nearbyUsers.push({name: key, distance: Math.round(distance)});
+          }
         }
       }
 
-      document.getElementById("chatBox").innerHTML = html || "No nearby users";
+      let html = "<h3 style='margin:15px 0 10px 0; color:#aaa;'>Nearby Users (≤50km)</h3>";
+      if (nearbyUsers.length === 0) {
+        html += "<div style='padding:20px; color:#666; text-align:center;'>No nearby users</div>";
+      } else {
+        nearbyUsers.forEach(user => {
+          html += `
+            <div style="padding:15px;background:#1e2a38;margin:5px;border-radius:15px;cursor:pointer; display:flex; align-items:center; transition:0.3s"
+                 onclick="startChat('${user.name}')"
+                 onmouseover="this.style.background='#2b5278'"
+                 onmouseout="this.style.background='#1e2a38'">
+              <span class="online-indicator"></span>
+              ${user.name} 
+              <span style="margin-left:auto; font-size:12px; opacity:0.7;">${user.distance}km</span>
+            </div>
+          `;
+        });
+      }
+      document.getElementById("chatBox").innerHTML = html;
     });
   });
 }
 
-// DISTANCE
+// DISTANCE CALCULATION
 function getDistance(lat1, lon1, lat2, lon2) {
-  let R = 6371;
+  let R = 6371; // km
   let dLat = (lat2 - lat1) * Math.PI/180;
   let dLon = (lon2 - lon1) * Math.PI/180;
-
-  let a = Math.sin(dLat/2)**2 +
-          Math.cos(lat1*Math.PI/180) *
-          Math.cos(lat2*Math.PI/180) *
-          Math.sin(dLon/2)**2;
-
+  let a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
 }
 
 // HOME
 function goHome() {
+  if (usersRef) usersRef.off();
   location.reload();
 }
+
+// Enter key to send message
+document.getElementById("message").addEventListener("keypress", function(e) {
+  if (e.key === "Enter") sendMessage();
+});
 </script>
 
 </body>
-</html> only show the user name which are available not all previous users which have been loged in previously and add in cone single code 
+</html>
