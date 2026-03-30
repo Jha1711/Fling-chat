@@ -1,75 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Anonymous Chat UI</title>
-
-<style>
-body {margin:0;font-family:Arial;background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;}
-.app {width:360px;height:640px;background:#0d0d0d;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;}
-.header {padding:15px;font-size:20px;font-weight:bold;}
-.search {padding:10px;}
-.search input {width:100%;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
-.chat-list {flex:1;overflow-y:auto;}
-.chat-item {display:flex;align-items:center;padding:12px;border-bottom:1px solid #111;cursor:pointer;}
-.avatar {width:40px;height:40px;border-radius:50%;background:pink;margin-right:10px;}
-.chat-info {flex:1;}
-.chat-name {font-weight:bold;}
-.chat-msg {font-size:12px;color:gray;}
-.time {font-size:12px;color:gray;}
-.chat-screen {display:none;flex-direction:column;height:100%;}
-.chat-header {padding:15px;border-bottom:1px solid #111;cursor:pointer;}
-.messages {flex:1;padding:10px;overflow-y:auto;}
-.msg {max-width:70%;padding:10px;border-radius:10px;margin:5px 0;}
-.sent {background:#d4f1a7;color:black;margin-left:auto;}
-.received {background:#334155;}
-.input-box {display:flex;padding:10px;border-top:1px solid #111;}
-.input-box input {flex:1;padding:10px;border-radius:10px;border:none;background:#1a1a1a;color:white;}
-.input-box button {margin-left:5px;padding:10px;border:none;border-radius:10px;background:#22c55e;color:white;}
-</style>
-</head>
-
-<body>
-
-<div class="app">
-
-  <!-- Chat List -->
-  <div id="listScreen">
-    <div class="header">Chats</div>
-    <div class="search"><input placeholder="Search" /></div>
-
-    <div class="chat-list">
-      <div class="chat-item" onclick="openChat()">
-        <div class="avatar"></div>
-        <div class="chat-info">
-          <div class="chat-name">Anonymous Room</div>
-          <div class="chat-msg">Tap to chat</div>
-        </div>
-        <div class="time">Live</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Chat Screen -->
-  <div id="chatScreen" class="chat-screen">
-    <div class="chat-header" onclick="back()">⬅ Back</div>
-    <div id="messages" class="messages"></div>
-
-    <div class="input-box">
-      <input id="msgInput" placeholder="Type message..." />
-      <button onclick="sendMessage()">Send</button>
-    </div>
-  </div>
-
-</div>
-
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-
 <script>
-// 🔴 YOUR FIREBASE CONFIG
+// ===============================
+// FIREBASE SETUP
+// ===============================
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "fling-chat-95e81.firebaseapp.com",
@@ -78,28 +10,174 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-const rootRef = firebase.database();
-const chatRef = rootRef.ref("chatroom");
-const metaRef = rootRef.ref("meta/lastReset");
+// ===============================
+// USER SETUP
+// ===============================
+const userId = "user_" + Math.floor(Math.random() * 10000);
+const userName = "User" + Math.floor(Math.random() * 1000);
 
-// ✅ CONTROLLED GLOBAL DELETE (only once per minute)
-metaRef.once("value", snap => {
-  const last = snap.val() || 0;
-  const now = Date.now();
-
-  if (now - last > 60000) {
-    chatRef.remove().then(() => {
-      console.log("Chat cleared globally");
-      metaRef.set(now);
-    });
-  }
+// Save user with location
+navigator.geolocation.getCurrentPosition(pos => {
+  db.ref("users/" + userId).set({
+    name: userName,
+    lat: pos.coords.latitude,
+    lng: pos.coords.longitude
+  });
 });
 
-// Random user ID
-const userId = "user_" + Math.floor(Math.random() * 10000);
+// ===============================
+// DISTANCE (50KM FILTER)
+// ===============================
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI/180;
+  const dLon = (lon2 - lon1) * Math.PI/180;
 
-// UI functions
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1*Math.PI/180) *
+    Math.cos(lat2*Math.PI/180) *
+    Math.sin(dLon/2) *
+    Math.sin(dLon/2);
+
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+// ===============================
+// FIND NEARBY USERS (SHOW IN UI)
+// ===============================
+function findNearbyUsers() {
+  db.ref("users").once("value", snap => {
+    const users = snap.val();
+    if (!users[userId]) return;
+
+    const myData = users[userId];
+    const list = document.querySelector(".chat-list");
+    list.innerHTML = "";
+
+    for (let id in users) {
+      if (id === userId) continue;
+
+      const u = users[id];
+      const dist = getDistance(myData.lat, myData.lng, u.lat, u.lng);
+
+      if (dist <= 50) {
+        const div = document.createElement("div");
+        div.className = "chat-item";
+        div.innerHTML = `
+          <div class="avatar"></div>
+          <div class="chat-info">
+            <div class="chat-name">${u.name}</div>
+            <div class="chat-msg">${dist.toFixed(1)} km away</div>
+          </div>
+          <div class="time">Nearby</div>
+        `;
+
+        div.onclick = () => startChat(id);
+        list.appendChild(div);
+      }
+    }
+  });
+}
+
+// Auto load nearby users
+setTimeout(findNearbyUsers, 2000);
+
+// ===============================
+// CHAT SYSTEM
+// ===============================
+let currentChat = null;
+
+function startChat(otherUserId) {
+  const chatId = "chat_" + Date.now();
+
+  db.ref("userChats/" + userId + "/" + chatId).set(true);
+  db.ref("userChats/" + otherUserId + "/" + chatId).set(true);
+
+  currentChat = chatId;
+
+  document.getElementById("messages").innerHTML = ""; // no old chat
+  openChat();
+  listenMessages(chatId);
+}
+
+// ===============================
+// SEND MESSAGE (✓)
+// ===============================
+function sendMessage() {
+  const input = document.getElementById("msgInput");
+  const text = input.value.trim();
+  if (!text || !currentChat) return;
+
+  const msgId = db.ref("chats/" + currentChat + "/messages").push().key;
+
+  db.ref("chats/" + currentChat + "/messages/" + msgId).set({
+    text,
+    sender: userId,
+    status: "sent",
+    time: Date.now()
+  });
+
+  input.value = "";
+}
+
+// ===============================
+// RECEIVE + DOUBLE TICK (✓✓)
+// ===============================
+const messagesDiv = document.getElementById("messages");
+
+function listenMessages(chatId) {
+  db.ref("chats/" + chatId + "/messages")
+    .limitToLast(50)
+    .on("child_added", snap => {
+
+      const msg = snap.val();
+      const msgKey = snap.key;
+
+      const div = document.createElement("div");
+      div.classList.add("msg");
+
+      let tick = "✓";
+      if (msg.status === "delivered") tick = "✓✓";
+
+      if (msg.sender === userId) {
+        div.classList.add("sent");
+        div.innerText = msg.text + " " + tick;
+
+        // DELETE OPTION (long press simulation)
+        div.onclick = () => {
+          if (confirm("Delete for everyone?")) {
+            deleteMessage(chatId, msgKey);
+            div.remove();
+          }
+        };
+
+      } else {
+        div.classList.add("received");
+        div.innerText = msg.text;
+
+        // mark delivered
+        db.ref("chats/" + chatId + "/messages/" + msgKey)
+          .update({ status: "delivered" });
+      }
+
+      messagesDiv.appendChild(div);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    });
+}
+
+// ===============================
+// DELETE FOR EVERYONE
+// ===============================
+function deleteMessage(chatId, msgId) {
+  db.ref("chats/" + chatId + "/messages/" + msgId).remove();
+}
+
+// ===============================
+// UI NAVIGATION (UNCHANGED)
+// ===============================
 function openChat() {
   document.getElementById("listScreen").style.display = "none";
   document.getElementById("chatScreen").style.display = "flex";
@@ -109,42 +187,4 @@ function back() {
   document.getElementById("listScreen").style.display = "block";
   document.getElementById("chatScreen").style.display = "none";
 }
-
-// Send message
-function sendMessage() {
-  const input = document.getElementById("msgInput");
-  const text = input.value.trim();
-  if (!text) return;
-
-  chatRef.push({
-    text: text,
-    sender: userId
-  });
-
-  input.value = "";
-}
-
-// Receive messages
-const messagesDiv = document.getElementById("messages");
-
-chatRef.on("child_added", snapshot => {
-  const data = snapshot.val();
-
-  const div = document.createElement("div");
-  div.classList.add("msg");
-
-  if (data.sender === userId) {
-    div.classList.add("sent");
-  } else {
-    div.classList.add("received");
-  }
-
-  div.innerText = data.text;
-  messagesDiv.appendChild(div);
-
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-});
 </script>
-
-</body>
-</html>
