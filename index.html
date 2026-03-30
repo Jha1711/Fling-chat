@@ -9,24 +9,45 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-/* (UNCHANGED STYLES — SAME AS YOUR CODE) */
 body {margin:0;font-family:'Segoe UI', sans-serif;color:white;}
+
+/* DASHBOARD */
 .dashboard {height:100vh;display:flex;justify-content:center;align-items:center;background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);}
 .card {background: rgba(255,255,255,0.05);backdrop-filter: blur(15px);padding:40px;border-radius:20px;text-align:center;width:300px;box-shadow:0 10px 40px rgba(0,0,0,0.5);}
 .card input {width:100%;padding:12px;border:none;border-radius:25px;background:#1e2a38;color:white;margin-bottom:20px;text-align:center;}
 .card button {width:100%;padding:12px;border:none;border-radius:25px;background: linear-gradient(45deg, #2aabee, #0088cc);color:white;font-size:16px;cursor:pointer;}
 .features {margin-top:15px;font-size:12px;color:#aaa;display:flex;justify-content:space-around;}
+
+/* CHAT */
 #chatUI {background:#0e1621;height:100vh;display:flex;flex-direction:column;}
 .header {background:#17212b;padding:10px;display:flex;gap:10px;}
 .header input {flex:1;padding:8px;border-radius:20px;border:none;background:#242f3d;color:white;}
+
+#nearbyList {padding:10px;border-bottom:1px solid #222;max-height:120px;overflow-y:auto;}
+
+.user-item {
+  padding:8px 10px;
+  margin:5px 0;
+  background:#1e2a38;
+  border-radius:10px;
+  cursor:pointer;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.user-item:hover {background:#2b5278;}
+.online-dot {width:8px;height:8px;background:#00ff88;border-radius:50%;}
+
 .chat-box {flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;}
 .msg {max-width:65%;padding:10px;margin:5px 0;border-radius:15px;}
 .sent {background:#2b5278;align-self:flex-end;}
 .received {background:#182533;align-self:flex-start;}
 .tick {font-size:10px;text-align:right;opacity:0.7;}
+
 .input-box {display:flex;padding:10px;background:#17212b;}
 .input-box input {flex:1;padding:10px;border-radius:20px;border:none;background:#242f3d;color:white;}
 .input-box button {margin-left:8px;padding:10px;border-radius:50%;border:none;background:#2aabee;color:white;}
+
 .typing {font-size:12px;color:#aaa;padding-left:15px;}
 </style>
 </head>
@@ -38,6 +59,7 @@ body {margin:0;font-family:'Segoe UI', sans-serif;color:white;}
   <div class="card">
     <h1>💬 Fling Chat</h1>
     <p>Connect anonymously. Chat instantly.</p>
+
     <input id="username" placeholder="Enter your username">
     <button onclick="createUser()">Start Chatting</button>
 
@@ -56,6 +78,9 @@ body {margin:0;font-family:'Segoe UI', sans-serif;color:white;}
     <input id="searchUser" placeholder="Search user">
     <button onclick="findNearby()">📍</button>
   </div>
+
+  <!-- Nearby Users -->
+  <div id="nearbyList"></div>
 
   <div id="chatBox" class="chat-box"></div>
   <div id="typingStatus" class="typing"></div>
@@ -87,15 +112,25 @@ function createUser() {
     db.ref("users/" + currentUser).set({
       name: currentUser,
       lat: pos.coords.latitude,
-      lng: pos.coords.longitude
+      lng: pos.coords.longitude,
+      online: true
     });
 
-    // AUTO DELETE ON EXIT
     db.ref("users/" + currentUser).onDisconnect().remove();
   });
 
   document.getElementById("dashboard").style.display = "none";
   document.getElementById("chatUI").style.display = "flex";
+
+  findNearby(); // auto load nearby users
+}
+
+// START CHAT
+function startChat(otherUser) {
+  document.getElementById("searchUser").value = otherUser;
+  chatRoom = [currentUser, otherUser].sort().join("_");
+  loadMessages();
+  listenTyping();
 }
 
 // SEND MESSAGE
@@ -152,15 +187,12 @@ function loadMessages() {
   });
 }
 
-// 1-to-1 CHAT SYSTEM
+// SEARCH USER (1-to-1)
 document.getElementById("searchUser").addEventListener("change", function() {
   let otherUser = this.value.trim();
   if (!otherUser) return;
 
-  chatRoom = [currentUser, otherUser].sort().join("_");
-
-  loadMessages();
-  listenTyping();
+  startChat(otherUser);
 });
 
 // TYPING
@@ -194,41 +226,32 @@ function listenTyping() {
   });
 }
 
-// NEARBY USERS
+// NEARBY USERS LIST
 function findNearby() {
   navigator.geolocation.getCurrentPosition(pos => {
     let lat1 = pos.coords.latitude;
     let lon1 = pos.coords.longitude;
 
-    db.ref("users").once("value", snap => {
+    db.ref("users").on("value", snap => {
       let users = snap.val();
-      let result = [];
+      let html = "";
 
       for (let key in users) {
         let u = users[key];
         let d = getDistance(lat1, lon1, u.lat, u.lng);
 
         if (d <= 50 && u.name !== currentUser) {
-          result.push(u.name);
+          html += `
+            <div class="user-item" onclick="startChat('${u.name}')">
+              ${u.name}
+              <div class="online-dot"></div>
+            </div>
+          `;
         }
       }
 
-      if (!result.length) {
-        alert("No nearby users found");
-        return;
-      }
-
-      let list = result.join(", ");
-      let selected = prompt("Nearby Users:\n" + list + "\n\nType username:");
-
-      if (selected && result.includes(selected)) {
-        document.getElementById("searchUser").value = selected;
-
-        chatRoom = [currentUser, selected].sort().join("_");
-
-        loadMessages();
-        listenTyping();
-      }
+      document.getElementById("nearbyList").innerHTML =
+        html || "<div style='color:#888;'>No nearby users</div>";
     });
   });
 }
