@@ -276,13 +276,13 @@ function findNearby() {
         if (key !== currentUser) {
           let u = users[key];
           let distance = getDistance(lat1, lon1, u.lat, u.lng);
-          if (distance <= 2000) {
+          if (distance <= 10000) {
             nearbyUsers.push({name: key, distance: Math.round(distance)});
           }
         }
       }
 
-      let html = "<h3 style='margin:15px 0 10px 0; color:#aaa;'>Nearby Users (≤2000km)</h3>";
+      let html = "<h3 style='margin:15px 0 10px 0; color:#aaa;'>Nearby Users (≤10000km)</h3>";
       if (nearbyUsers.length === 0) {
         html += "<div style='padding:20px; color:#666; text-align:center;'>No nearby users</div>";
       } else {
