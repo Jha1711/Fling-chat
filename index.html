@@ -1,8 +1,9 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device=device-width, initial-scale=1.0">
 <title>Fling Chat</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -44,17 +45,30 @@ body { margin:0; font-family:'Segoe UI', sans-serif; color:white; }
 
 .chat-box { flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; }
 
-.msg { max-width:65%; padding:10px; margin:5px 0; border-radius:15px; }
+.msg { max-width:65%; padding:10px; margin:5px 0; border-radius:15px; position:relative; }
 .sent { background:#2b5278; align-self:flex-end; }
 .received { background:#182533; align-self:flex-start; }
 
-.tick { font-size:10px; text-align:right; opacity:0.7; }
+.tick { font-size:10px; text-align:right; opacity:0.7; margin-top:2px; }
+.tick-sent::after { content: "✓"; color:#a0a0a0; }
+.tick-delivered::after { content: "✓✓"; color:#a0a0a0; }
+.tick-read::after { content: "✓✓"; color:#4ade80; }
 
 .input-box { display:flex; padding:10px; background:#17212b; }
 .input-box input { flex:1; padding:10px; border-radius:20px; border:none; background:#242f3d; color:white; }
 .input-box button { margin-left:8px; padding:10px; border-radius:50%; border:none; background:#2aabee; color:white; }
 
 .typing { font-size:12px; color:#aaa; padding-left:15px; }
+.typing-dots { display: inline-block; }
+.typing-dots::after {
+  content: '...';
+  animation: dots 1.5s infinite;
+}
+@keyframes dots {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60%, 100% { content: '...'; }
+}
 
 .online-indicator { display: inline-block; width: 8px; height: 8px; background: #4ade80; border-radius: 50%; margin-right: 5px; }
 .offline-indicator { background: #6b7280; }
@@ -116,7 +130,9 @@ const db = firebase.database();
 let currentUser = "";
 let chatRoom = "";
 let typingTimeout;
+let typingRef;
 let usersRef;
+let messagesRef;
 
 // CREATE USER
 function createUser() {
@@ -124,7 +140,6 @@ function createUser() {
   if (!currentUser) return alert("Enter username");
 
   navigator.geolocation.getCurrentPosition(pos => {
-    // Set user data with online status
     const userData = {
       name: currentUser,
       lat: pos.coords.latitude,
@@ -186,7 +201,13 @@ function startChat(user) {
       <button onclick="showActiveUsers()" style="background:#2aabee; border:none; padding:8px 16px; border-radius:20px; color:white; cursor:pointer;">← Back to users</button>
     </div>
   `;
+  
+  // Clear previous listeners
+  if (messagesRef) messagesRef.off();
+  if (typingRef) typingRef.off();
+  
   loadMessages();
+  setupTypingIndicator();
 }
 
 // SEND MESSAGE
@@ -196,6 +217,7 @@ function sendMessage() {
 
   let id = Date.now();
 
+  // Send message with "sent" status
   db.ref("chats/" + chatRoom + "/" + id).set({
     sender: currentUser,
     text: msg,
@@ -206,11 +228,11 @@ function sendMessage() {
   document.getElementById("message").value = "";
 }
 
-// LOAD MESSAGES
+// LOAD MESSAGES WITH TICK STATUS
 function loadMessages() {
-  db.ref("chats/" + chatRoom).off();
-
-  db.ref("chats/" + chatRoom).orderByChild("timestamp").on("value", snapshot => {
+  messagesRef = db.ref("chats/" + chatRoom).orderByChild("timestamp");
+  
+  messagesRef.on("value", snapshot => {
     let data = snapshot.val();
     let html = "";
 
@@ -220,25 +242,95 @@ function loadMessages() {
       for (let id in data) {
         let msg = data[id];
         let type = msg.sender === currentUser ? "sent" : "received";
+        let tickClass = "";
+        
+        if (msg.sender === currentUser) {
+          if (msg.status === "sent") tickClass = "tick-sent";
+          else if (msg.status === "delivered") tickClass = "tick-delivered";
+          else if (msg.status === "read") tickClass = "tick-read";
+        }
 
         html += `
           <div class="msg ${type}">
             ${msg.text}
+            ${msg.sender === currentUser ? `<div class="tick ${tickClass}"></div>` : ''}
           </div>
         `;
       }
     }
 
     let chatBox = document.getElementById("chatBox");
+    let otherUser = chatRoom.split("_")[0] === currentUser ? chatRoom.split("_")[1] : chatRoom.split("_")[0];
     chatBox.innerHTML = `
       <div style="text-align:center; padding:20px; color:#aaa;">
-        <h3>Chatting with ${chatRoom.split("_")[0] === currentUser ? chatRoom.split("_")[1] : chatRoom.split("_")[0]}</h3>
+        <h3>Chatting with ${otherUser}</h3>
         <button onclick="showActiveUsers()" style="background:#2aabee; border:none; padding:8px 16px; border-radius:20px; color:white; cursor:pointer;">← Back to users</button>
       </div>
       ${html}
     `;
     chatBox.scrollTop = chatBox.scrollHeight;
   });
+}
+
+// MARK MESSAGES AS DELIVERED/READ
+function markMessagesDelivered() {
+  if (!chatRoom) return;
+  
+  db.ref("chats/" + chatRoom).once("value").then(snapshot => {
+    let messages = snapshot.val();
+    if (messages) {
+      for (let id in messages) {
+        if (messages[id].sender !== currentUser && messages[id].status !== "read") {
+          db.ref("chats/" + chatRoom + "/" + id).update({ status: "delivered" });
+        }
+      }
+    }
+  });
+}
+
+// MARK MESSAGES AS READ
+function markMessagesRead() {
+  if (!chatRoom) return;
+  
+  db.ref("chats/" + chatRoom).once("value").then(snapshot => {
+    let messages = snapshot.val();
+    if (messages) {
+      for (let id in messages) {
+        if (messages[id].sender !== currentUser && messages[id].status !== "read") {
+          db.ref("chats/" + chatRoom + "/" + id).update({ status: "read" });
+        }
+      }
+    }
+  });
+}
+
+// TYPING INDICATOR
+function setupTypingIndicator() {
+  const typingStatusEl = document.getElementById("typingStatus");
+  
+  // Listen for other's typing
+  typingRef = db.ref(`typing/${chatRoom}/${currentUser === chatRoom.split("_")[0] ? chatRoom.split("_")[1] : chatRoom.split("_")[0]}`);
+  typingRef.on("value", snapshot => {
+    if (snapshot.val()) {
+      typingStatusEl.textContent = `${snapshot.val()} is typing`;
+      typingStatusEl.classList.add("typing-dots");
+    } else {
+      typingStatusEl.textContent = "";
+      typingStatusEl.classList.remove("typing-dots");
+    }
+  });
+}
+
+function onTypingStart() {
+  if (!chatRoom) return;
+  const otherUser = chatRoom.split("_")[0] === currentUser ? chatRoom.split("_")[1] : chatRoom.split("_")[0];
+  db.ref(`typing/${chatRoom}/${otherUser}`).set(currentUser);
+}
+
+function onTypingEnd() {
+  if (!chatRoom) return;
+  const otherUser = chatRoom.split("_")[0] === currentUser ? chatRoom.split("_")[1] : chatRoom.split("_")[0];
+  db.ref(`typing/${chatRoom}/${otherUser}`).remove();
 }
 
 // SEARCH → PRIVATE CHAT
@@ -316,14 +408,11 @@ function getDistance(lat1, lon1, lat2, lon2) {
 // HOME
 function goHome() {
   if (usersRef) usersRef.off();
+  if (messagesRef) messagesRef.off();
+  if (typingRef) typingRef.off();
   location.reload();
 }
 
-// Enter key to send message
-document.getElementById("message").addEventListener("keypress", function(e) {
-  if (e.key === "Enter") sendMessage();
-});
-</script>
-
-</body>
-</html>
+// MESSAGE INPUT EVENT LISTENERS
+document.addEventListener("DOMContentLoaded", function() {
+ 
